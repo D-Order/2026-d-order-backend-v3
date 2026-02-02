@@ -52,10 +52,15 @@ python manage.py migrate
 
 ## Django
 ```bash
-python manage.py runserver
+# Daphne 서버 실행 (HTTP + WebSocket 지원)
+daphne -b 0.0.0.0 -p 8000 project.asgi:application
 ```
 
 서버가 `http://localhost:8000`에서 실행됩니다.
+**주의:**
+- Docker로 PostgreSQL + Redis를 먼저 실행해야 합니다
+- Daphne은 Django Channels의 WebSocket을 지원하므로 반드시 사용해야 합니다
+- `python manage.py runserver`는 WebSocket을 지원하지 않습니다
 
 ## Spring
 
