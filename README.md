@@ -56,7 +56,7 @@ python manage.py runserver
 ```
 
 서버가 `http://localhost:8000`에서 실행됩니다.
-
+! 도커로 postgres+redis 먼저 올려야 DB를 찾을 수 있습니다.
 ## Spring
 
 작성바람~~~
