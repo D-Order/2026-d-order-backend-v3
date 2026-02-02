@@ -41,6 +41,7 @@ pip install -r requirements.txt
 ```
 
 ### DB 마이그레이션 실행
+마이그레이션은 django 통해서 하셔야합니다~
 
 ```bash
 cd django
@@ -68,7 +69,8 @@ python manage.py runserver
 ├── .env                          # 환경 변수 (Django + Docker) notion 참조
 ├── README.md                     # 이 파일
 ├── docker-compose.local.yml      # 로컬 개발 환경시 postgre + redis 컨테이너 만들기
-│
+├── docker-compose.prod.yml       # 작성 예정 / 배포 시 docker-compose
+├── docker-compose.staging.yml    # 작성 예정 / 개발서버 docker-compose
 ├── django/
 │   ├── manage.py                 
 │   ├── requirements.txt          # Python 의존성 파일들
@@ -81,7 +83,7 @@ python manage.py runserver
 
 ## 🔧 환경 변수 설정
 
-`.env` notion 참고
+notion 'BE space' 참고
 
 ---
 
@@ -94,8 +96,8 @@ docker-compose -f docker-compose.local.yml up -d
 ```
 하나만 실행
 ```bash
-docker-compose -f django/docker-compose.local.yml up -d postgres
-docker-compose -f django/docker-compose.local.yml up -d redis
+docker-compose -f docker-compose.local.yml up -d postgres
+docker-compose -f docker-compose.local.yml up -d redis
 ```
 ### 컨테이너 상태 확인
 
@@ -104,7 +106,7 @@ docker-compose -f docker-compose.local.yml ps
 ```
 ### 컨테이너 종료
 ```bash
-docker-compose -f django/docker-compose.local.yml down
+docker-compose -f docker-compose.local.yml down
 
 ```
 ### 로그 확인
@@ -124,7 +126,7 @@ docker-compose -f docker-compose.local.yml logs redis
 
 ```bash
 docker-compose -f docker-compose.local.yml down # db 데이터는 남음
-docker-compose -f django/docker-compose.local.yml down -v # -v 옵션이 붙으면 db 데이터도 삭제
+docker-compose -f docker-compose.local.yml down -v # -v 옵션이 붙으면 db 데이터도 삭제
 ```
 
 
