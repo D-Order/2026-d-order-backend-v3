@@ -21,7 +21,7 @@ Incremental==24.11.0
 msgpack==1.1.2
 packaging==26.0
 pillow==12.1.0
-# psycopg2==2.9.11 # 배포 환경도 docker 쓸거라 걍 주석처리 할게요.
+psycopg2==2.9.11
 psycopg2-binary==2.9.11
 py-ubjson==0.16.1
 pyasn1==0.6.2
