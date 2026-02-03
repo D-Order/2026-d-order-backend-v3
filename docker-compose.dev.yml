@@ -119,7 +119,6 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ./django:/app
       - static_volume_dev:/app/static
       - media_volume_dev:/app/media
     networks:
