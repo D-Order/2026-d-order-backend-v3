@@ -33,8 +33,6 @@ fi
 
 echo "Redis 연결 성공!"
 
-chown -R $(whoami):$(whoami) /app/static /app/media
-
 # 데이터베이스 마이그레이션 실행
 echo "데이터베이스 마이그레이션 실행 중..."
 python manage.py migrate --noinput
