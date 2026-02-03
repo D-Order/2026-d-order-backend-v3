@@ -28,10 +28,10 @@ environ.Env.read_env(os.path.join(BASE_DIR.parent, '.env'))
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# 환경 설정 (local / staging / production)
+# 환경 설정 (local / development / production)
 ENVIRONMENT = env('ENVIRONMENT')
 IS_LOCAL = ENVIRONMENT == 'local'
-IS_STAGING = ENVIRONMENT == 'staging'
+IS_DEVELOPMENT = ENVIRONMENT == 'development'
 IS_PRODUCTION = ENVIRONMENT == 'production'
 
 
@@ -52,8 +52,11 @@ def get_allowed_hosts():
     """
     if IS_LOCAL:
         hosts_str = env('ALLOWED_HOSTS_LOCAL')
-    elif IS_STAGING:
-        hosts_str = env('ALLOWED_HOSTS_STAGING')
+    elif IS_DEVELOPMENT:
+        # Development: 개발 도메인 + 로컬 호스트 모두 허용
+        dev = env('ALLOWED_HOSTS_DEV')
+        local = env('ALLOWED_HOSTS_LOCAL')
+        hosts_str = f"{dev},{local}"
     else:  # IS_PRODUCTION
         hosts_str = env('ALLOWED_HOSTS_PRODUCTION')
 
@@ -264,16 +267,16 @@ CORS_ALLOW_CREDENTIALS = True
 def get_cors_origins():
     """
     - IS_LOCAL: CORS_ALLOWED_ORIGINS_LOCAL
-    - IS_STAGING: CORS_ALLOWED_ORIGINS_STAGING
+    - IS_DEVELOPMENT: CORS_ALLOWED_ORIGINS_DEV + CORS_ALLOWED_ORIGINS_LOCAL
     - IS_PRODUCTION: CORS_ALLOWED_ORIGINS_FRONTEND + CORS_ALLOWED_ORIGINS_BACKEND
 
     """
     if IS_LOCAL:
         origins_str = env('CORS_ALLOWED_ORIGINS_LOCAL')
-    elif IS_STAGING:
-        staging = env('CORS_ALLOWED_ORIGINS_STAGING')
+    elif IS_DEVELOPMENT:
+        dev = env('CORS_ALLOWED_ORIGINS_DEV')
         local = env('CORS_ALLOWED_ORIGINS_LOCAL')
-        origins_str = f"{staging},{local}"
+        origins_str = f"{dev},{local}"
     else:  # IS_PRODUCTION
         frontend = env('CORS_ALLOWED_ORIGINS_FRONTEND')
         backend = env('CORS_ALLOWED_ORIGINS_BACKEND')
