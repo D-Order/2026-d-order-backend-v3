@@ -2,71 +2,12 @@
 D-Order 백엔드 레포입니다.
 ---
 
-## 🚀 빠른 시작
-
-### 요구사항
-
-- Python 3.12
-- Docker & Docker Compose
-- Git
-
-### local 개발 시 Docker Compose로 데이터베이스 실행
-
-```bash
-# 프로젝트 루트 경로에서 실행
-cd ..
-docker-compose -f docker-compose.local.yml up -d
-```
-
-상태 확인:
-```bash
-docker-compose -f docker-compose.local.yml ps
-```
-
-
-###  python 가상환경 생성 및 활성화
-
-```bash
-cd django
-python3.12 -m venv venv # 3.12
-
-source venv/bin/activate  # macOS/Linux
-venv\Scripts\activate     # Windows
-```
-
-### 의존성 설치
-
-```bash
-pip install -r requirements.txt
-```
-
-### DB 마이그레이션 실행
-마이그레이션은 django 통해서 하셔야합니다~
-
-```bash
-cd django
-python manage.py migrate
-```
-
-### 서버 실행
-
-## Django
-```bash
-# Daphne 서버 실행 (HTTP + WebSocket 지원)
-daphne -b 0.0.0.0 -p 8000 project.asgi:application
-```
-
-서버가 `http://localhost:8000`에서 실행됩니다.
-**주의:**
-- Docker로 PostgreSQL + Redis를 먼저 실행해야 합니다
-- Daphne은 Django Channels의 WebSocket을 지원하므로 반드시 사용해야 합니다
-- `python manage.py runserver`는 WebSocket을 지원하지 않습니다
-
-## Spring
-
-작성바람~~~
----
-
+## Contributors
+| 이름 | Email | 담담 |
+| --- | --- | --- |
+|  |  |  |
+|  |  |  |
+|  |  |  |
 ## 📁 프로젝트 구조
 
 ```
@@ -81,59 +22,40 @@ daphne -b 0.0.0.0 -p 8000 project.asgi:application
 │   ├── requirements.txt          # Python 의존성 파일들
 │   ├── apps/
 │   └── project/                  # Django 프로젝트 폴더
-└── Spring/
+└── Spring/                       # Spring
 ```
+
+## 3. 커밋 및 PR 컨벤션
+
+시간이 없기때문에..최소한의 태그만 사용하는거로 컨벤션 정했습니다. 
+
+### ✅ Commit Convention
+
+| 태그 | 설명 | 예시 |
+| --- | --- | --- |
+| Feat | 새로운 기능 추가(새 API/유스케이스/도메인 기능) | `Feat: 주문 생성 API 추가` |
+| Fix | 버그 수정(오류/예외/로직 결함) | `Fix: 결제 승인 시 NPE 수정` |
+| Design | UI 스타일 및 레이아웃 변경(백엔드엔 보통 거의 없음; Swagger/문서 UI 정도만 해당) | `Design: Swagger UI 테마 변경` |
+| Docs | 문서 수정(README, API 문서, 주석 등) | `Docs: 로컬 실행 방법 업데이트` |
+| Refactor | 리팩토링(기능 변화 없음, 구조/가독성/중복 개선) | `Refactor: 주문 서비스 메서드 분리` |
+| Chore | 설정/패키지/환경 변경(빌드, 의존성, 설정 파일 등) | `Chore: Spring profile 설정 정리` |
+
+> ⚠️ Feat은 진짜 "새 기능"에만! 오타 수정 등에는 Fix 사용
+> 
+- **`Refactor`**: **기존 코드의 내부 구조를 개선**하는 데 중점을둠. 외부 동작은 동일하지만 코드를 더 효율적이고 읽기 쉽게 만드는 변경에 해당 (예: 함수 분리, 변수명 개선, 중복 코드 제거).
+- **`Chore`**: **프로젝트의 빌드 환경, 종속성, 관리 관련 작업**에 중점을 둠. 코드 자체의 로직 변경보다는 개발 환경 설정, 라이브러리 업데이트, 빌드 스크립트 수정 등.
+
+
+
+### ✅ PR 제목 규칙
+
+| 아이콘 | 태그 | 설명 | 예시 |
+| --- | --- | --- | --- |
+| ✨ | [Feature] | 새로운 기능 추가 | ✨ [Feature] #12 - 마이페이지 기능 추가 |
+| 🐛 | [Fix] | 버그 수정 | 🐛 [Fix] #15 - 로그인 버튼 오류 수정 |
+| 🎨 | [Design] | UI 스타일 및 레이아웃 | 🎨 [Design] #21 - 헤더 스타일 변경 |
+| 📝 | [Docs] | 문서 수정 | 📝 [Docs] #30 - README 사용법 수정 |
+| ♻️ | [Refactor] | 리팩토링 | ♻️ [Refactor] #35 - API 요청 함수 리팩토링 |
+| 🔧 | [Chore] | 환경 설정 변경 | 🔧 [Chore] #40 - webpack 설정 변경 |
 
 ---
-
-## 🔧 환경 변수 설정
-
-notion 'BE space' 참고
-
----
-
-## 🐳 Docker Compose 명령어
-
-### 컨테이너 시작
-
-```bash
-docker-compose -f docker-compose.local.yml up -d
-```
-하나만 실행
-```bash
-docker-compose -f docker-compose.local.yml up -d postgres
-docker-compose -f docker-compose.local.yml up -d redis
-```
-### 컨테이너 상태 확인
-
-```bash
-docker-compose -f docker-compose.local.yml ps
-```
-### 컨테이너 종료
-```bash
-docker-compose -f docker-compose.local.yml down
-
-```
-### 로그 확인
-
-```bash
-# 모든 로그
-docker-compose -f docker-compose.local.yml logs -f
-
-# PostgreSQL만
-docker-compose -f docker-compose.local.yml logs postgres
-
-# Redis만
-docker-compose -f docker-compose.local.yml logs redis
-```
-
-### 컨테이너 중지
-
-```bash
-docker-compose -f docker-compose.local.yml down # db 데이터는 남음
-docker-compose -f docker-compose.local.yml down -v # -v 옵션이 붙으면 db 데이터도 삭제
-```
-
-
----
-
