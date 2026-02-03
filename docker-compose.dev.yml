@@ -3,9 +3,9 @@ version: '3.8'
 services:
   nginx:
     image: ${DOCKER_USERNAME:-local}/d-order-nginx:dev
-    build:
-      context: ./nginx
-      dockerfile: Dockerfile
+    # build:
+    #   context: ./nginx
+    #   dockerfile: Dockerfile
     container_name: d-order-nginx-dev
     environment:
       DOMAIN: ${DOMAIN:-localhost}
@@ -84,9 +84,9 @@ services:
 
   django:
     image: ${DOCKER_USERNAME:-local}/d-order-django:dev
-    build:
-      context: ./django
-      dockerfile: Dockerfile
+    # build:
+    #   context: ./django
+    #   dockerfile: Dockerfile
     container_name: d-order-django-dev
     command: daphne -b 0.0.0.0 -p 8000 project.asgi:application
     environment:
@@ -127,9 +127,9 @@ services:
 
   # Spring Boot placeholder for future use
   # spring:
-  #   build:
-  #     context: ./spring
-  #     dockerfile: Dockerfile
+    # build:
+    #   context: ./spring
+    #   dockerfile: Dockerfile
   #   container_name: d-order-spring-dev
   #   environment:
   #     ENVIRONMENT: development
