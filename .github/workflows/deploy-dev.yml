@@ -148,6 +148,7 @@ jobs:
     #   (needs.build-django.result == 'success' || needs.build-nginx.result == 'success' || needs.build-spring.result == 'success')
 
     runs-on: ubuntu-latest
+    environment: development
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -157,9 +158,9 @@ jobs:
         if: needs.check-labels.outputs.deploy-all == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.EC2_DEV_HOST }}
-          username: ${{ secrets.EC2_DEV_USER }}
-          key: ${{ secrets.EC2_DEV_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           source: "docker-compose.dev.yml"
           target: ${{ env.DEPLOY_PATH }}
 
@@ -168,9 +169,9 @@ jobs:
         if: needs.check-labels.outputs.deploy-all == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_DEV_HOST }}
-          username: ${{ secrets.EC2_DEV_USER }}
-          key: ${{ secrets.EC2_DEV_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ${{ env.DEPLOY_PATH }}
 
@@ -190,9 +191,9 @@ jobs:
         if: needs.check-labels.outputs.deploy-django == 'true' && needs.check-labels.outputs.deploy-all != 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_DEV_HOST }}
-          username: ${{ secrets.EC2_DEV_USER }}
-          key: ${{ secrets.EC2_DEV_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ${{ env.DEPLOY_PATH }}
 
@@ -212,9 +213,9 @@ jobs:
         if: needs.check-labels.outputs.deploy-nginx == 'true' && needs.check-labels.outputs.deploy-all != 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_DEV_HOST }}
-          username: ${{ secrets.EC2_DEV_USER }}
-          key: ${{ secrets.EC2_DEV_SSH_KEY }}
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ${{ env.DEPLOY_PATH }}
 
@@ -231,9 +232,9 @@ jobs:
       #   if: needs.check-labels.outputs.deploy-spring == 'true' && needs.check-labels.outputs.deploy-all != 'true'
       #   uses: appleboy/ssh-action@v1.0.3
       #   with:
-      #     host: ${{ secrets.EC2_DEV_HOST }}
-      #     username: ${{ secrets.EC2_DEV_USER }}
-      #     key: ${{ secrets.EC2_DEV_SSH_KEY }}
+      #     host: ${{ secrets.EC2_HOST }}
+      #     username: ${{ secrets.EC2_USER }}
+      #     key: ${{ secrets.EC2_SSH_KEY }}
       #     script: |
       #       cd ${{ env.DEPLOY_PATH }}
       #       echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
