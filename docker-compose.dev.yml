@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: ${DOCKER_USERNAME:-local}/d-order-nginx:dev
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: d-order-nginx-dev
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+      - static_volume_dev:/app/static:ro
+      - media_volume_dev:/app/media:ro
+      - nginx_logs_dev:/var/log/nginx
+    depends_on:
+      - django
+      # - spring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health/django"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - d-order-network-dev
+    restart: unless-stopped
+
+  # Let's Encrypt SSL 인증서 자동 발급/갱신
+  certbot:
+    image: certbot/certbot:latest
+    container_name: d-order-certbot-dev
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - d-order-network-dev
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: d-order-postgres-dev
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: -U postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./db-scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - d-order-network-dev
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: d-order-redis-dev
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - d-order-network-dev
+    restart: unless-stopped
+
+  django:
+    image: ${DOCKER_USERNAME:-local}/d-order-django:dev
+    build:
+      context: ./django
+      dockerfile: Dockerfile
+    container_name: d-order-django-dev
+    command: daphne -b 0.0.0.0 -p 8000 project.asgi:application
+    environment:
+      ENVIRONMENT: development
+      DEBUG: "True"
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_HOSTS_DEV: ${ALLOWED_HOSTS_DEV}
+      ALLOWED_HOSTS_LOCAL: ${ALLOWED_HOSTS_LOCAL}
+      CORS_ALLOWED_ORIGINS_DEV: ${CORS_ALLOWED_ORIGINS_DEV}
+      CORS_ALLOWED_ORIGINS_LOCAL: ${CORS_ALLOWED_ORIGINS_LOCAL}
+      DB_ENGINE: ${DB_ENGINE}
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
+      SECURE_SSL_REDIRECT: "False"
+      CSRF_COOKIE_SECURE: "False"
+      SESSION_COOKIE_SECURE: "False"
+      CSRF_COOKIE_HTTPONLY: "True"
+      SESSION_COOKIE_HTTPONLY: "True"
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - static_volume_dev:/app/static
+      - media_volume_dev:/app/media
+    networks:
+      - d-order-network-dev
+    restart: unless-stopped
+
+  # Spring Boot placeholder for future use
+  # spring:
+  #   build:
+  #     context: ./spring
+  #     dockerfile: Dockerfile
+  #   container_name: d-order-spring-dev
+  #   environment:
+  #     ENVIRONMENT: development
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+  #     SPRING_DATASOURCE_USERNAME: d_order_spring_user
+  #     SPRING_DATASOURCE_PASSWORD: ${SPRING_DB_PASSWORD}
+  #     SPRING_REDIS_HOST: redis
+  #     SPRING_REDIS_PORT: 6379
+  #     SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
+  #   expose:
+  #     - "8080"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - d-order-network-dev
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data_dev:
+    driver: local
+  redis_data_dev:
+    driver: local
+  static_volume_dev:
+    driver: local
+  media_volume_dev:
+    driver: local
+  nginx_logs_dev:
+    driver: local
+  certbot_www:
+    driver: local
+  certbot_certs:
+    driver: local
+
+networks:
+  d-order-network-dev:
+    driver: bridge
