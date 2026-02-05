@@ -11,8 +11,12 @@ RUN apk add --no-cache wget
 RUN mkdir -p /var/log/nginx && \
     chown -R nginx:nginx /var/log/nginx
 
-# 정적/미디어 파일 디렉토리 생성
-RUN mkdir -p /app/static /app/media && \
+# S3 버킷 사용으로 주석처리
+# # 정적/미디어 파일 디렉토리 생성
+# RUN mkdir -p /app/static /app/media && \
+#     chown -R nginx:nginx /app
+
+RUN mkdir -p /app/static && \
     chown -R nginx:nginx /app
 
 # Let's Encrypt 디렉토리 생성

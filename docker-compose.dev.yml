@@ -3,9 +3,6 @@ version: '3.8'
 services:
   nginx:
     image: ${DOCKER_USERNAME:-local}/d-order-nginx:dev
-    # build:
-    #   context: ./nginx
-    #   dockerfile: Dockerfile
     container_name: d-order-nginx-dev
     environment:
       DOMAIN: ${DOMAIN:-localhost}
@@ -16,7 +13,6 @@ services:
       - certbot_www:/var/www/certbot:ro
       - certbot_certs:/etc/letsencrypt:ro
       - static_volume_dev:/app/static:ro
-      - media_volume_dev:/app/media:ro
       - nginx_logs_dev:/var/log/nginx
     depends_on:
       - django
@@ -68,13 +64,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: d-order-redis-dev
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     ports:
       - "6379:6379"
     volumes:
       - redis_data_dev:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -84,9 +80,6 @@ services:
 
   django:
     image: ${DOCKER_USERNAME:-local}/d-order-django:dev
-    # build:
-    #   context: ./django
-    #   dockerfile: Dockerfile
     container_name: d-order-django-dev
     command: daphne -b 0.0.0.0 -p 8000 project.asgi:application
     environment:
@@ -105,12 +98,16 @@ services:
       DB_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       SECURE_SSL_REDIRECT: "False"
       CSRF_COOKIE_SECURE: "False"
       SESSION_COOKIE_SECURE: "False"
       CSRF_COOKIE_HTTPONLY: "True"
       SESSION_COOKIE_HTTPONLY: "True"
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
+      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
     expose:
       - "8000"
     depends_on:
@@ -120,7 +117,6 @@ services:
         condition: service_healthy
     volumes:
       - static_volume_dev:/app/static
-      - media_volume_dev:/app/media
     networks:
       - d-order-network-dev
     restart: unless-stopped
@@ -157,8 +153,9 @@ volumes:
     driver: local
   static_volume_dev:
     driver: local
-  media_volume_dev:
-    driver: local
+  # S3 버킷 사용으로 주석처리
+  # media_volume_dev:
+  #   driver: local
   nginx_logs_dev:
     driver: local
   certbot_www:

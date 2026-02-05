@@ -8,4 +8,3 @@ def health_check(request):
         return JsonResponse({"status": "ok"}, status=200)
     except Exception:
         return JsonResponse({"status": "error"}, status=503)
-
