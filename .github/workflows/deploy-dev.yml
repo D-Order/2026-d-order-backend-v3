@@ -10,11 +10,10 @@
 name: Deploy to DEV
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
     branches:
       - dev
-      - dev_test
 
 env:
   DEPLOY_PATH: /home/ubuntu/d-order
