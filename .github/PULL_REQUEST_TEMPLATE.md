@@ -1,3 +1,4 @@
+<!-- ✨Feat / 🐛 Fix / 📝 Docs / ♻️ Refactor / 🔧 Chore -->
 ## 🔍 What is the PR?
 
 <!-- PR 내용을 리스트로 작성 -->
