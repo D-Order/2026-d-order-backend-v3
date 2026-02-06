@@ -25,21 +25,20 @@ class Booth(models.Model):
 
     # 요금 정보
     SEAT_TYPE_CHOICES = [
-        ('NO', 'No Seat Tax'),
-        ('PP', 'Seat Tax Per Person'),
-        ('PT', 'Seat Tax Per Table'),
+        ('NO', 'No Seat Fee'),
+        ('PP', 'Seat Fee Per Person'),
+        ('PT', 'Seat Fee Per Table'),
     ]
 
     seat_type = models.CharField(max_length=2, choices=SEAT_TYPE_CHOICES, default='NO')
-    seat_tax_person = models.IntegerField(null=True, blank=True)
-    seat_tax_table = models.IntegerField(null=True, blank=True)
+    seat_fee_person = models.IntegerField(null=True, blank=True)
+    seat_fee_table = models.IntegerField(null=True, blank=True)
 
     # 운영 정보
     operate_dates = models.JSONField(default=dict)
     host_name = models.CharField(max_length=100, blank=True, null=True, help_text="주최 이름")
     total_revenues = models.IntegerField(default=0)
     location = models.CharField(max_length=200, blank=True, null=True, help_text="부스 위치")
-
 
     qr_image = models.ImageField(upload_to='qr_images/', blank=True, null=True, help_text='부스 전용 QR 코드 이미지')
     thumbnail_image = models.ImageField(upload_to='thumbnails/', blank=True, null=True, help_text='부스 썸네일 이미지')
