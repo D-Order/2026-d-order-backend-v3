@@ -74,10 +74,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
+
     #apps
 
-    
+
     # S3
     'storages',
 
@@ -85,6 +85,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+
+    # Channels (WebSocket)
+    'channels',
 ]
 
 MIDDLEWARE = [
