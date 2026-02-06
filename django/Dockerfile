@@ -1,23 +1,17 @@
 # syntax=docker/dockerfile:1
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# 시스템 패키지 설치 (빌드 도구 + 런타임)
-RUN apk add --no-cache \
-    gcc \
-    musl-dev \
-    postgresql-dev \
-    postgresql-client \
-    python3-dev \
-    libffi-dev \
-    openssl-dev \
+# 런타임 필수 패키지만 설치 (빌드 도구 불필요)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
     curl \
-    icu-data-full
+    && rm -rf /var/lib/apt/lists/*
 
 # 일반 사용자 생성 (보안)
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+RUN groupadd -g 1000 appuser && \
+    useradd -u 1000 -g appuser -m appuser
 
 # pip 캐시 마운트로 재빌드 시 빠름
 COPY requirements.txt .
