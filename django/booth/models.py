@@ -22,8 +22,6 @@ class Booth(models.Model):
     # 테이블 정보
     table_max_cnt = models.IntegerField()
     table_limit_hours = models.DecimalField(max_digits=4, decimal_places=2)
-    qr_image = models.ImageField(upload_to='qr_images/', blank=True, null=True, help_text='부스 전용 QR 코드 이미지')
-
 
     # 요금 정보
     SEAT_TYPE_CHOICES = [
@@ -32,11 +30,19 @@ class Booth(models.Model):
         ('PT', 'Seat Tax Per Table'),
     ]
 
-    seat_type = models.CharField(max_length=2, choices=[("NO","없음"),("PP","1인당"),("PT","테이블당")])
+    seat_type = models.CharField(max_length=2, choices=SEAT_TYPE_CHOICES, default='NO')
     seat_tax_person = models.IntegerField(null=True, blank=True)
     seat_tax_table = models.IntegerField(null=True, blank=True)
 
-    
+    # 운영 정보
+    operate_dates = models.JSONField(default=dict)
+    host_name = models.CharField(max_length=100, blank=True, null=True, help_text="주최 이름")
+    total_revenues = models.IntegerField(default=0)
+    location = models.CharField(max_length=200, blank=True, null=True, help_text="부스 위치")
+
+
+    qr_image = models.ImageField(upload_to='qr_images/', blank=True, null=True, help_text='부스 전용 QR 코드 이미지')
+    thumbnail_image = models.ImageField(upload_to='thumbnails/', blank=True, null=True, help_text='부스 썸네일 이미지')
     def generate_qr(self):
 
         qr_data = f"https://frontend-url.com/booth/{self.pk}/"  #TODO : 부스 고유 URL로 변경
@@ -56,4 +62,7 @@ class Booth(models.Model):
         super().save(*args, **kwargs)
         if is_new and not self.qr_image:
             self.generate_qr()
-            super().save(update_fields=["table_qr_image"])
+            super().save(update_fields=["qr_image"])
+
+    def __str__(self):
+        return f"{self.pk} - {self.name}"
