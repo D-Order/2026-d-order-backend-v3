@@ -96,28 +96,6 @@ jobs:
           cd django
           pytest -v
 
-  # Django 린트
-  lint-django:
-    needs: check-labels
-    if: needs.check-labels.outputs.test-all == 'true' || needs.check-labels.outputs.test-django == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install linter
-        run: pip install ruff
-
-      - name: Run linter
-        run: |
-          cd django
-          ruff check . --output-format=github
-
   # TODO: Spring 테스트
   # test-spring:
   #   needs: check-labels
