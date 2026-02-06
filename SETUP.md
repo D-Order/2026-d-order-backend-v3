@@ -1,10 +1,27 @@
 # 📑 목차
 
-- [🔥🔥🔥 이거 대체 왜 함?](#-이거-대체-왜-함-)
+- [📑 목차](#-목차)
+- [🔥🔥🔥 이거 대체 왜 함? 🔥🔥🔥](#-이거-대체-왜-함-)
+    - [✨✨ 초기세팅 귀찮더라도 딱 한번만 해주십쇼 ✨✨](#-초기세팅-귀찮더라도-딱-한번만-해주십쇼-)
 - [🔧 환경 변수 설정](#-환경-변수-설정)
 - [🚀 빠른 시작](#-빠른-시작)
-  - [요구사항](#요구사항)
-  - [설치 가이드](#설치-가이드)
+    - [요구사항](#요구사항)
+    - [설치 가이드](#설치-가이드)
+    - [시스템 요구사항](#시스템-요구사항)
+    - [1. WSL 2 설치 (필수)](#1-wsl-2-설치-필수)
+    - [2. Docker Desktop 다운로드 및 설치](#2-docker-desktop-다운로드-및-설치)
+    - [3. 설치 확인](#3-설치-확인)
+    - [문제 해결](#문제-해결)
+    - [참고 자료](#참고-자료)
+    - [2. 설치 확인](#2-설치-확인)
+    - [문제 해결](#문제-해결-1)
+    - [Homebrew + Colima로 설치 (Docker Desktop 대안)](#homebrew--colima로-설치-docker-desktop-대안)
+      - [1. Homebrew 설치 **(없는 경우)**](#1-homebrew-설치-없는-경우)
+      - [2. Docker CLI 및 Colima 설치](#2-docker-cli-및-colima-설치)
+      - [3. Colima 시작](#3-colima-시작)
+      - [4. 설치 확인](#4-설치-확인)
+      - [Colima 명령어](#colima-명령어)
+      - [문제 해결](#문제-해결-2)
   - [local 개발 시 Docker Compose로 postgresql + redis 실행](#local-개발-시-docker-compose로-postgresql--redis-실행)
   - [python 가상환경 생성 및 활성화](#python-가상환경-생성-및-활성화)
   - [의존성 설치](#의존성-설치)
@@ -13,6 +30,11 @@
   - [Django](#django)
   - [Spring](#spring)
 - [🐳 Docker Compose 명령어](#-docker-compose-명령어)
+    - [컨테이너 시작](#컨테이너-시작)
+    - [컨테이너 상태 확인](#컨테이너-상태-확인)
+    - [컨테이너 종료](#컨테이너-종료)
+    - [로그 확인](#로그-확인)
+    - [컨테이너 중지](#컨테이너-중지)
 
 ---
 
@@ -255,14 +277,19 @@ venv\Scripts\activate     # Windows
 
 python manage.py migrate
 ```
+**주의**\
+migrations파일은 git을 통해 추적중입니다. 유의해서 작업해주시고 작업시 스키마의 변경점이 있다면, makemigrations 해주십시오.
 
 # 서버 실행
 
 ## Django
 
 ```bash
-# Daphne 서버 실행 (HTTP + WebSocket 지원)
+# Daphne 서버 실행 (HTTP + WebSocket 지원) / Spring 개발자분들은 이거 사용
 daphne -b 0.0.0.0 -p 8000 project.asgi:application
+
+# runserver (WebSocket 안됨)
+python manage.py runserver
 ```
 
 서버가 `http://localhost:8000`에서 실행됩니다.
@@ -270,8 +297,25 @@ daphne -b 0.0.0.0 -p 8000 project.asgi:application
 **주의:**
 
 - Docker로 PostgreSQL + Redis를 먼저 실행해야 합니다
-- Daphne은 Django Channels의 WebSocket을 지원하므로 반드시 사용해야 합니다
+- Daphne은 Django Channels의 WebSocket을 지원하므로 웹소켓을 사용하고자하면 사용하셔야합니다.
+- 근데 변경사항 자동 적용이 안되어서 Django 개발자분들은 runserver 사용이 편하실겁니다. (웹소켓 안쓸땐 runserver)
 - `python manage.py runserver`는 WebSocket을 지원하지 않습니다
+
+**django 테스트 실행**
+```bash
+# 상세 출력
+pytest -v
+
+# 간단한 출력
+pytest
+
+# 실행 후 실패한 테스트만 재실행
+pytest --lf
+
+# 특정 앱만 테스트
+pytest {폴더이름}/ -v
+# ex pytest authentication -v
+```
 
 ## Spring
 

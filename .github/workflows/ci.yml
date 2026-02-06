@@ -94,7 +94,7 @@ jobs:
           CORS_ALLOWED_ORIGINS_LOCAL: http://localhost:3000
         run: |
           cd django
-          python manage.py test --verbosity=2
+          pytest -v
 
   # Django 린트
   lint-django:
