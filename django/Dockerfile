@@ -1,10 +1,9 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-alpine
 
-# 작업 디렉토리 설정
-# 요건 docker 내부 경로
 WORKDIR /app
 
-# 시스템 패키지 설치
+# 시스템 패키지 설치 (빌드 도구 + 런타임)
 RUN apk add --no-cache \
     gcc \
     musl-dev \
@@ -13,29 +12,22 @@ RUN apk add --no-cache \
     python3-dev \
     libffi-dev \
     openssl-dev \
-    redis \
     curl \
     icu-data-full
 
-# 컨테이너 내부 사용자 권한을 위한 사용자 및 그룹 생성
-# docker는 기본적으로 root 권한으로 실행 일반 유저를 만들어서 권한 낮추기
+# 일반 사용자 생성 (보안)
 RUN addgroup -g 1000 appuser && \
     adduser -D -u 1000 -G appuser appuser
 
-
+# pip 캐시 마운트로 재빌드 시 빠름
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
-# 프로젝트 코드 복사
-COPY . .
-
-# entrypoint.sh 실행 권한 부여
+# 프로젝트 코드 복사 및 권한 설정
+COPY --chown=appuser:appuser . .
 RUN chmod +x entrypoint.sh
 
-# 소유권 변경
-RUN chown -R appuser:appuser /app
-
-# 일반 사용자로 전환
 USER appuser
 
 # 헬스체크 추가
