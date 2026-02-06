@@ -76,7 +76,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     #apps
-
+    'authentication',
+    'booth',
 
     # S3
     'storages',
