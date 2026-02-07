@@ -44,6 +44,10 @@ class Booth(models.Model):
     thumbnail_image = models.ImageField(upload_to='thumbnails/', blank=True, null=True, help_text='부스 썸네일 이미지')
     def generate_qr(self):
 
+        # 기존 QR 이미지가 있으면 삭제
+        if self.qr_image:
+            self.qr_image.delete(save=False)
+
         qr_data = f"https://frontend-url.com/booth/{self.pk}/"  #TODO : 부스 고유 URL로 변경
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(qr_data)

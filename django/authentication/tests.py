@@ -1,26 +1,13 @@
-import logging
-from contextlib import contextmanager
-
-from django.test import TestCase
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from rest_framework import status
 from django.contrib.auth.models import User
 
 from booth.models import Booth
+from utils.test_utils import IN_MEMORY_STORAGES, suppress_request_warnings
 
 
-@contextmanager
-def suppress_request_warnings():
-    """의도적인 Bad Request 테스트 시 로그 억제"""
-    logger = logging.getLogger('django.request')
-    previous_level = logger.level
-    logger.setLevel(logging.ERROR)
-    try:
-        yield
-    finally:
-        logger.setLevel(previous_level)
-
-
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
 class SignupViewTest(APITestCase):
     """회원가입 API 테스트"""
 
