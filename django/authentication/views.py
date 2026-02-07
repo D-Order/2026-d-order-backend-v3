@@ -42,6 +42,7 @@ class SignupView(APIView):
             res.set_cookie(
                 jwt_settings.get('AUTH_COOKIE'),
                 access_token,
+                max_age=int(jwt_settings.get('ACCESS_TOKEN_LIFETIME').total_seconds()),
                 httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
                 samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
                 secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
@@ -51,6 +52,7 @@ class SignupView(APIView):
             res.set_cookie(
                 jwt_settings.get('AUTH_COOKIE_REFRESH'),
                 refresh_token,
+                max_age=int(jwt_settings.get('REFRESH_TOKEN_LIFETIME').total_seconds()),
                 httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
                 samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
                 secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
@@ -68,8 +70,7 @@ class CheckUsernameView(APIView):
 
         if not username:
             return Response({
-                "message": "username 파라미터가 필요합니다.",
-                "data": None
+                "message": "username 파라미터가 필요합니다."
             }, status=status.HTTP_400_BAD_REQUEST)
 
         is_available = not User.objects.filter(username=username).exists()
@@ -94,17 +95,15 @@ class AuthApiView(APIView):
             user = User.objects.get(username=username)
         except User.DoesNotExist:
             return Response({
-                "message": "일치하지 않는 아이디에요",
-                "data": None
-            }, status=status.HTTP_401_UNAUTHORIZED)
+                "message": "일치하지 않는 아이디예요."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. 비밀번호 확인
         user = authenticate(username=username, password=password)
         if not user:
             return Response({
-                "message": "일치하지 않는 비밀번호에요.",
-                "data": None
-            }, status=status.HTTP_401_UNAUTHORIZED)
+                "message": "일치하지 않는 비밀번호예요."
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
         # 3. 응답
@@ -127,6 +126,7 @@ class AuthApiView(APIView):
         res.set_cookie(
             jwt_settings.get('AUTH_COOKIE'),
             access_token,
+            max_age=int(jwt_settings.get('ACCESS_TOKEN_LIFETIME').total_seconds()),
             httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
             samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
             secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
@@ -136,6 +136,7 @@ class AuthApiView(APIView):
         res.set_cookie(
             jwt_settings.get('AUTH_COOKIE_REFRESH'),
             refresh_token,
+            max_age=int(jwt_settings.get('REFRESH_TOKEN_LIFETIME').total_seconds()),
             httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
             samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
             secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
@@ -147,8 +148,7 @@ class AuthApiView(APIView):
     def delete(self, request):
         jwt_settings = settings.SIMPLE_JWT
         res = Response({
-            "message": "로그아웃 성공",
-            "data": None
+            "message": "로그아웃 성공"
         }, status=200)
 
         # access token 삭제
@@ -162,61 +162,80 @@ class AuthApiView(APIView):
     # 토큰 재발급
     def get(self, request):
         jwt_settings = settings.SIMPLE_JWT
-        try:
-            access_token = request.COOKIES.get(jwt_settings.get('AUTH_COOKIE'))
-            if not access_token:
-                raise jwt.InvalidTokenError
+        access_token = request.COOKIES.get(jwt_settings.get('AUTH_COOKIE'))
 
-            payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = payload.get("user_id")
-            user = get_object_or_404(User, pk=user_id)
-
-            return Response({
-                "message": "Access 토큰 유효",
-                "data": {
-                    "username" : user.username, 
-                    "booth_id": user.pk,
-                }
-            }, status=status.HTTP_200_OK)
-
-        except jwt.ExpiredSignatureError:
-            # access token 만료 시 refresh token 으로 재발급
-            refresh_token = request.COOKIES.get(jwt_settings.get('AUTH_COOKIE_REFRESH'))
-            if not refresh_token:
-                return Response({
-                    "message": "Refresh 토큰 없음",
-                    "data": None
-                }, status=status.HTTP_401_UNAUTHORIZED)
-            serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
-            if serializer.is_valid(raise_exception=True):
-                new_access = serializer.data["access"]
-                payload = jwt.decode(new_access, settings.SECRET_KEY, algorithms=["HS256"])
+        # 1. access token이 있으면 검증
+        if access_token:
+            try:
+                payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=["HS256"])
                 user_id = payload.get("user_id")
                 user = get_object_or_404(User, pk=user_id)
 
-
-                res = Response({
-                    "message": "access 토큰 재발급 완료",
+                return Response({
+                    "message": "Access 토큰 유효",
                     "data": {
                         "username": user.username,
                         "booth_id": user.pk,
                     }
                 }, status=status.HTTP_200_OK)
 
-                res.set_cookie(
-                    jwt_settings.get('AUTH_COOKIE'),
-                    new_access,
-                    httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
-                    samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
-                    secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
-                )
-                return res
+            except jwt.ExpiredSignatureError:
+                pass  # 만료 → 아래에서 refresh token으로 재발급
 
-        except jwt.InvalidTokenError:
+            except jwt.InvalidTokenError:
+                return Response({
+                    "message": "Access 토큰이 유효하지 않음"
+                }, status=status.HTTP_401_UNAUTHORIZED)
+
+        # 2. access token이 없거나 만료된 경우 → refresh token으로 재발급
+        refresh_token = request.COOKIES.get(jwt_settings.get('AUTH_COOKIE_REFRESH'))
+        if not refresh_token:
             return Response({
-                "message": "Refresh 토큰이 유효하지 않음",
-                "data": None
+                "message": "Refresh 토큰 없음"
             }, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
+            serializer.is_valid(raise_exception=True)
+        except Exception:
+            return Response({
+                "message": "Refresh 토큰이 유효하지 않음"
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+        new_access = serializer.validated_data["access"]
+        new_refresh = serializer.validated_data["refresh"]
+        payload = jwt.decode(new_access, settings.SECRET_KEY, algorithms=["HS256"])
+        user_id = payload.get("user_id")
+        user = get_object_or_404(User, pk=user_id)
+
+        res = Response({
+            "message": "Access 토큰 재발급 완료",
+            "data": {
+                "username": user.username,
+                "booth_id": user.pk,
+            }
+        }, status=status.HTTP_200_OK)
+
+        # access token
+        res.set_cookie(
+            jwt_settings.get('AUTH_COOKIE'),
+            new_access,
+            max_age=int(jwt_settings.get('ACCESS_TOKEN_LIFETIME').total_seconds()),
+            httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
+            samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
+            secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
+        )
+
+        # refresh token
+        res.set_cookie(
+            jwt_settings.get('AUTH_COOKIE_REFRESH'),
+            new_refresh,
+            max_age=int(jwt_settings.get('REFRESH_TOKEN_LIFETIME').total_seconds()),
+            httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
+            samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
+            secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
+        )
+        return res
 
 
     
