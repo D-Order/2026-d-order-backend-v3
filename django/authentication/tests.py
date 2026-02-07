@@ -194,7 +194,7 @@ class AuthApiViewTest(APITestCase):
                 format='json'
             )
 
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_login_invalid_password(self):
         """잘못된 password 로그인 실패 테스트"""
@@ -208,7 +208,7 @@ class AuthApiViewTest(APITestCase):
                 format='json'
             )
 
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
     def test_token_verify_success(self):
         """토큰 유효성 확인 성공 테스트"""

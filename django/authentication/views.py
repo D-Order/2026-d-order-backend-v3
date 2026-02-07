@@ -203,6 +203,7 @@ class AuthApiView(APIView):
             }, status=status.HTTP_401_UNAUTHORIZED)
 
         new_access = serializer.validated_data["access"]
+        new_refresh = serializer.validated_data["refresh"]
         payload = jwt.decode(new_access, settings.SECRET_KEY, algorithms=["HS256"])
         user_id = payload.get("user_id")
         user = get_object_or_404(User, pk=user_id)
@@ -215,10 +216,21 @@ class AuthApiView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
+        # access token
         res.set_cookie(
             jwt_settings.get('AUTH_COOKIE'),
             new_access,
             max_age=int(jwt_settings.get('ACCESS_TOKEN_LIFETIME').total_seconds()),
+            httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
+            samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
+            secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
+        )
+
+        # refresh token
+        res.set_cookie(
+            jwt_settings.get('AUTH_COOKIE_REFRESH'),
+            new_refresh,
+            max_age=int(jwt_settings.get('REFRESH_TOKEN_LIFETIME').total_seconds()),
             httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
             samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
             secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
