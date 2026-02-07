@@ -96,14 +96,14 @@ class AuthApiView(APIView):
         except User.DoesNotExist:
             return Response({
                 "message": "일치하지 않는 아이디예요."
-            }, status=status.HTTP_401_UNAUTHORIZED)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         # 2. 비밀번호 확인
         user = authenticate(username=username, password=password)
         if not user:
             return Response({
                 "message": "일치하지 않는 비밀번호예요."
-            }, status=status.HTTP_401_UNAUTHORIZED)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
         # 3. 응답
