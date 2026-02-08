@@ -319,13 +319,36 @@ pytest {폴더이름}/ -v
 
 ## Spring
 
-spring 담당자 분이 작성바람~~~
+### 1. 환경 요구사항
+   JDK 17 이상
 
-```bash
-실행코드
+PostgreSQL (Docker로 실행 중이어야 함)
+
+Environment Variables: .env 파일의 DB 접속 정보(POSTGRES_DB, USER, PASSWORD)가 환경변수로 주입되어야 합니다.
+
+### 2. 폴더 구조 (Layered Architecture)
+  ``` Plaintext
+
+spring/src/main/java/com/example/spring
+├── config/             # 설정 클래스 (WebConfig - CORS 설정 등)
+├── controller/         # API 요청 진입점 (TestController)
+├── domain/             # JPA Entity (DB 테이블 매핑)
+├── dto/                # 데이터 전송 객체 (Request/Response)
+├── repository/         # DB 접근 계층 (JPA Repository)
+└── service/            # 비즈니스 로직 처리 (Transactional)
 ```
+### 3. 서버 실행
+   터미널에서 spring 폴더로 이동 후 실행합니다.
 
-서버가 `http://localhost:8080`에서 실행됩니다.
+```Bash
+
+cd spring
+인텔리제이에서 서버실행 
+서버가 http://localhost:8080에서 실행됩니다.
+````
+### 4. 연결 테스트 API
+   서버 실행 후 Postman 등을 이용해 테스트 get과 post api를 테스트할 수 있습니다.
+
 
 # 🐳 Docker Compose 명령어
 
