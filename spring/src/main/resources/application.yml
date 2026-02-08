@@ -1,0 +1,37 @@
+# ==================================================================
+# 공통 설정
+# ==================================================================
+spring:
+  application:
+    name: spring
+  profiles:
+    active: local
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        show_sql: true
+        format_sql: true
+        # MySQLDialect를 PostgreSQLDialect로 변경
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+---
+# ==================================================================
+# local (개발) 환경 전용 설정
+# ==================================================================
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    # URL: mysql -> postgresql / 포트 3306 -> 5432 / DB 이름 확인
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB}
+    # .env에 정의된 변수명과 일치시켜야 합니다.
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
