@@ -147,8 +147,8 @@ services:
       SPRING_PROFILES_ACTIVE: dev
       # DB 설정 - Spring 전용 유저 사용 (init-db.sh에서 생성)
       POSTGRES_DB: ${POSTGRES_DB}
-      SPRING_DB_USER: ${SPRING_DB_USER:-spring_user}
-      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:-spring_password}
+      SPRING_DB_USER: ${SPRING_DB_USER}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
       # Redis 설정 - Django와 공유
       REDIS_HOST: redis
       REDIS_PORT: 6379
