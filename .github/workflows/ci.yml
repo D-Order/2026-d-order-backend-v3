@@ -96,49 +96,49 @@ jobs:
           cd django
           pytest -v
 
-  # TODO: Spring 테스트
-  # test-spring:
-  #   needs: check-labels
-  #   if: needs.check-labels.outputs.test-all == 'true' || needs.check-labels.outputs.test-spring == 'true'
-  #   runs-on: ubuntu-latest
-  #   services:
-  #     postgres:
-  #       image: postgres:15-alpine
-  #       env:
-  #         POSTGRES_DB: d_order_test
-  #         POSTGRES_USER: postgres
-  #         POSTGRES_PASSWORD: postgres
-  #       ports:
-  #         - 5432:5432
-  #       options: >-
-  #         --health-cmd pg_isready
-  #         --health-interval 10s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #     redis:
-  #       image: redis:7-alpine
-  #       ports:
-  #         - 6379:6379
-  #       options: >-
-  #         --health-cmd "redis-cli ping"
-  #         --health-interval 10s
-  #         --health-timeout 5s
-  #         --health-retries 5
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #     - name: Set up JDK 21
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         java-version: '21'
-  #         distribution: 'temurin'
-  #         cache: 'gradle'
-  #     - name: Run tests
-  #       env:
-  #         SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/d_order_test
-  #         SPRING_DATASOURCE_USERNAME: postgres
-  #         SPRING_DATASOURCE_PASSWORD: postgres
-  #       run: |
-  #         cd spring
-  #         chmod +x gradlew
-  #         ./gradlew test --no-daemon
+  # Spring 테스트
+  test-spring:
+    needs: check-labels
+    if: needs.check-labels.outputs.test-all == 'true' || needs.check-labels.outputs.test-spring == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: d_order_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: Run tests
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/d_order_test
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+        run: |
+          cd spring
+          chmod +x gradlew
+          ./gradlew test --no-daemon

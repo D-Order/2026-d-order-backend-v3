@@ -132,32 +132,6 @@ services:
       - d-order-network-dev
     restart: unless-stopped
 
-  # Spring Boot 서비스 (기존 placeholder 주석 코드)
-  # spring:
-  # build:
-  #   context: ./spring
-  #   dockerfile: Dockerfile
-  #   container_name: d-order-spring-dev
-  #   environment:
-  #     ENVIRONMENT: development
-  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
-  #     SPRING_DATASOURCE_USERNAME: d_order_spring_user
-  #     SPRING_DATASOURCE_PASSWORD: ${SPRING_DB_PASSWORD}
-  #     SPRING_REDIS_HOST: redis
-  #     SPRING_REDIS_PORT: 6379
-  #     SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_dev_password}
-  #   expose:
-  #     - "8080"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   networks:
-  #     - d-order-network-dev
-  #   restart: unless-stopped
-
-  # Spring Boot 서비스 (활성화)
   # Django와 같은 PostgreSQL/Redis를 공유하되, 별도 DB 유저 사용
   spring:
     # build + image 둘 다 지정:
