@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   nginx:
@@ -16,9 +16,17 @@ services:
       - nginx_logs_dev:/var/log/nginx
     depends_on:
       - django
-      # - spring
+      - spring
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health/django"]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost/health/django",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -47,6 +55,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: -U postgres
       PGDATA: /var/lib/postgresql/data/pgdata
+      # Spring 유저 생성용 환경변수 (init-db.sh에서 사용)
+      SPRING_DB_USER: ${SPRING_DB_USER:-spring_user}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:-spring_password}
     ports:
       - "5432:5432"
     volumes:
@@ -121,11 +132,11 @@ services:
       - d-order-network-dev
     restart: unless-stopped
 
-  # Spring Boot placeholder for future use
+  # Spring Boot 서비스 (기존 placeholder 주석 코드)
   # spring:
-    # build:
-    #   context: ./spring
-    #   dockerfile: Dockerfile
+  # build:
+  #   context: ./spring
+  #   dockerfile: Dockerfile
   #   container_name: d-order-spring-dev
   #   environment:
   #     ENVIRONMENT: development
@@ -145,6 +156,53 @@ services:
   #   networks:
   #     - d-order-network-dev
   #   restart: unless-stopped
+
+  # Spring Boot 서비스 (활성화)
+  # Django와 같은 PostgreSQL/Redis를 공유하되, 별도 DB 유저 사용
+  spring:
+    # build + image 둘 다 지정:
+    # - 기본: image에서 pull
+    # - docker-compose up --build: 로컬에서 Dockerfile로 빌드
+    build:
+      context: ./spring
+      dockerfile: Dockerfile
+    image: ${DOCKER_USERNAME:-local}/d-order-spring:dev
+    container_name: d-order-spring-dev
+    environment:
+      # Spring 프로필 설정 (application.yml의 dev 프로필 사용)
+      SPRING_PROFILES_ACTIVE: dev
+      # DB 설정 - Spring 전용 유저 사용 (init-db.sh에서 생성)
+      POSTGRES_DB: ${POSTGRES_DB}
+      SPRING_DB_USER: ${SPRING_DB_USER:-spring_user}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:-spring_password}
+      # Redis 설정 - Django와 공유
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - d-order-network-dev
+    restart: unless-stopped
 
 volumes:
   postgres_data_dev:
