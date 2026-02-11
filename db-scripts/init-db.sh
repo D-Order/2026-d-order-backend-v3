@@ -4,10 +4,10 @@
 
 set -e
 
-# 환경변수 사용 (docker-compose.local.yml에서 전달)
-SPRING_USER=${SPRING_DB_USER:-spring_user}
-SPRING_PASSWORD=${SPRING_DB_PASSWORD:-spring_password}
-DB_NAME=${POSTGRES_DB:-d_order}
+# 환경변수 사용 (docker-compose에서 전달)
+SPRING_USER=${SPRING_DB_USER}
+SPRING_DB_PASSWORD=${SPRING_DB_PASSWORD}
+DB_NAME=${POSTGRES_DB}
 
 # PostgreSQL이 준비될 때까지 대기
 until pg_isready -U postgres; do
@@ -17,7 +17,7 @@ done
 
 # Spring 유저 생성
 psql -U postgres -d postgres <<-EOSQL
-  CREATE USER $SPRING_USER WITH PASSWORD '$SPRING_PASSWORD';
+  CREATE USER $SPRING_USER WITH PASSWORD '$SPRING_DB_PASSWORD';
 EOSQL
 
 # 데이터베이스에 대한 권한 부여
