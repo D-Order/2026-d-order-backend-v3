@@ -19,19 +19,66 @@ spring:
 
 ---
 # ==================================================================
-# local (개발) 환경 전용 설정
+# local 환경 전용 설정
+# 로컬에서 직접 실행할 때 사용 (IDE에서 Run)
+# docker-compose.local_env.yml로 DB/Redis만 띄우고 연결
 # ==================================================================
 spring:
   config:
     activate:
       on-profile: local
   datasource:
-    # URL: mysql -> postgresql / 포트 3306 -> 5432 / DB 이름 확인
-    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB}
-    # .env에 정의된 변수명과 일치시켜야 합니다.
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    # 로컬에서는 localhost로 접속 (DB 컨테이너 포트 포워딩)
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB:d_order}
+    # 로컬 개발 시에는 관리자 계정 사용 (편의상)
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
+
+---
+# ==================================================================
+# dev 환경 전용 설정 (Docker 컨테이너용)
+# docker-compose.dev.yml에서 사용
+# Spring 전용 DB 유저(spring_user)로 연결
+# ==================================================================
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    # Docker 네트워크 내에서는 서비스 이름(postgres)으로 접속
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB:d_order}
+    # Spring 전용 유저 사용 (init-db.sh에서 생성됨)
+    # 보안: Django와 분리된 권한 관리
+    username: ${SPRING_DB_USER:spring_user}
+    password: ${SPRING_DB_PASSWORD:spring_password}
+    driver-class-name: org.postgresql.Driver
+    # 커넥션 풀 설정 (HikariCP)
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      # dev 환경: 스키마 자동 업데이트 (운영에서는 none 또는 validate)
+      ddl-auto: update
+    properties:
+      hibernate:
+        # dev 환경에서는 SQL 로깅 활성화
+        show_sql: true
+        format_sql: true
+  # Redis 설정 (같은 Redis를 Django와 공유)
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
+# 서버 설정
+server:
+  port: 8080
