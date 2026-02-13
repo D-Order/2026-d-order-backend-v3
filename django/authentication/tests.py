@@ -224,9 +224,9 @@ class AuthApiViewTest(APITestCase):
 
         access_token = login_response.cookies.get('access_token').value
 
-        # 토큰 유효성 확인 요청
-        response = self.client.get(
-            self.auth_url,
+        # 토큰 유효성 확인 요청 (POST /api/v3/auth/refresh/)
+        response = self.client.post(
+            '/api/v3/auth/refresh/',
             HTTP_COOKIE=f'access_token={access_token}'
         )
 
@@ -236,7 +236,7 @@ class AuthApiViewTest(APITestCase):
     def test_token_verify_missing_token(self):
         """토큰 없이 유효성 확인 시 실패 테스트"""
         with suppress_request_warnings():
-            response = self.client.get(self.auth_url)
+            response = self.client.post('/api/v3/auth/refresh/')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
     
@@ -267,4 +267,15 @@ class AuthApiViewTest(APITestCase):
         self.assertEqual(response.cookies['refresh_token'].value, '')
         self.assertEqual(response.cookies['refresh_token']['max-age'], 0)
     
-    
+
+class CsrfTokenViewTest(APITestCase):
+
+    def setUp(self):
+        self.csrf_url = '/api/v3/auth/csrf-token/'
+
+    def test_get_csrf_token(self):
+        """CSRF 토큰 획득 테스트"""
+        response = self.client.post(self.csrf_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('csrftoken', response.cookies) 

@@ -6,7 +6,7 @@ labels: ''
 assignees: pyeree
 
 ---
-<!-- ✨Feat / 🐛 Fix / 📝 Docs / ♻️ Refactor / 🔧 Chore -->
+<!-- ✨ [Feat] / 🐛 [Fix] / 📝 [Docs] / ♻️ [Refactor] / 🔧 [Chore] -->
 ## ✔️ Issue
 
 <!-- 이슈에 대해 간략하게 설명해주세요 -->
