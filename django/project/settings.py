@@ -77,6 +77,7 @@ INSTALLED_APPS = [
 
     #apps
     'authentication',
+    'core',
     'booth',
 
     # S3

@@ -4,7 +4,7 @@ from rest_framework import status
 from django.contrib.auth.models import User
 
 from booth.models import Booth
-from utils.test_utils import IN_MEMORY_STORAGES, suppress_request_warnings
+from core.test_utils import IN_MEMORY_STORAGES, suppress_request_warnings
 
 
 @override_settings(STORAGES=IN_MEMORY_STORAGES)
