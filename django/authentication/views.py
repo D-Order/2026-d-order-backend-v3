@@ -1,9 +1,12 @@
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
+
 import jwt
 from rest_framework.views import APIView
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -16,6 +19,13 @@ from rest_framework.response import Response
 
 class SignupView(APIView):
     permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        """메서드별 권한 설정"""
+        if self.request.method == 'DELETE':  # 로그아웃
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
 
     def post(self, request):
         serializer = UserBoothSignupSerializer(data=request.data)
@@ -85,7 +95,7 @@ class CheckUsernameView(APIView):
 class AuthApiView(APIView):
     permission_classes = [AllowAny]
 
-    #  로그인 
+    #  로그인
     def post(self, request):
         username = request.data.get("username")
         password = request.data.get("password")
@@ -114,12 +124,11 @@ class AuthApiView(APIView):
                 "booth_id": user.id
             }
         }, status=status.HTTP_200_OK)
-            
+
         # 4. 토큰 발급
         token = TokenObtainPairSerializer.get_token(user)
         refresh_token = str(token)
         access_token = str(token.access_token)
-        
         jwt_settings = settings.SIMPLE_JWT
 
         # access token
@@ -158,9 +167,13 @@ class AuthApiView(APIView):
         res.delete_cookie(jwt_settings.get('AUTH_COOKIE_REFRESH'))
 
         return res
-    
+
+
+class TokenRefreshView(APIView):
+    permission_classes = [AllowAny]
+
     # 토큰 재발급
-    def get(self, request):
+    def post(self, request):
         jwt_settings = settings.SIMPLE_JWT
         access_token = request.COOKIES.get(jwt_settings.get('AUTH_COOKIE'))
 
@@ -241,3 +254,14 @@ class AuthApiView(APIView):
     
 
 
+class CsrfTokenView(APIView):
+    permission_classes = [AllowAny]
+
+    @method_decorator(ensure_csrf_cookie)
+    def post(self, request):
+        return Response({
+            "message": "CSRF 토큰 발급 성공",
+            "data": {
+                "csrf_token": request.META.get("CSRF_COOKIE"),
+            }
+        }, status=status.HTTP_200_OK)
