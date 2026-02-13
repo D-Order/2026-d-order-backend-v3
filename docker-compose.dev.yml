@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   nginx:
     image: ${DOCKER_USERNAME:-local}/d-order-nginx:dev

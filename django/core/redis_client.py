@@ -5,23 +5,23 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-_clinet = None
+_client = None
 
 def get_redis_client():
-    global _clinet
-    if _clinet is None:
+    global _client
+    if _client is None:
         try:
-            _clinet = redis.StrictRedis(
+            _client = redis.StrictRedis(
                 host=settings.REDIS_HOST,
-                port=settings.REDIS_PORT,
-                db=settings.REDIS_DB,
+                port=int(settings.REDIS_PORT),
+                # db=0,  # Redis DB 0 사용 (필요시 설정 추가)
                 password=settings.REDIS_PASSWORD,
                 decode_responses=True
             )
         except Exception as e:
             logger.error(f"Failed to create Redis client: {e}")
             raise
-    return _clinet
+    return _client
 
 def publish(channel: str, data: dict):
     client = get_redis_client()
