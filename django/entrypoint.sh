@@ -15,6 +15,11 @@ python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
 echo "=== 초기화 완료 ==="
+
+# Redis Listener 백그라운드 실행
+echo "Redis Listener 시작 중 (백그라운드)..."
+python manage.py listen_redis &
+
 echo "Daphne 서버 시작 중..."
 
 # 전달된 명령 실행 (CMD) ->  ["daphne", "-b", "0.0.0.0", "-p", "8000", "project.asgi:application"] 이 부분 말하는겨
