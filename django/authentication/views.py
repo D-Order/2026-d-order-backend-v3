@@ -15,7 +15,7 @@ from authentication.utils import set_jwt_cookies, delete_jwt_cookies
 from authentication.serializers import UserBoothSignupSerializer
 
 
-class SignupView(APIView):
+class SignupAPIView(APIView):
     """회원가입"""
     permission_classes = [AllowAny]
 
@@ -64,7 +64,7 @@ class SignupView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class CheckUsernameView(APIView):
+class CheckUsernameAPIView(APIView):
     """아이디 중복 체크"""
     permission_classes = [AllowAny]
 
@@ -88,7 +88,7 @@ class CheckUsernameView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class AuthApiView(APIView):
+class AuthAPIView(APIView):
     """로그인 / 로그아웃"""
     permission_classes = [AllowAny]
 
@@ -139,7 +139,7 @@ class AuthApiView(APIView):
         return response
 
 
-class TokenRefreshView(APIView):
+class TokenRefreshAPIView(APIView):
     """토큰 검증 & 재발급"""
     permission_classes = [AllowAny]
 

@@ -63,3 +63,17 @@ class BoothService:
         #     )
 
         return booth
+
+    @staticmethod
+    def update_booth(booth, booth_data):
+        """부스 마이페이지 데이터 업데이트
+
+        Args:
+            booth_data (dict): 변경할 부스 데이터
+        """
+        # TODO : 테이블 요금 변경 시 menu에 연결된 기본 요금 변경 필요...
+        for key, value in booth_data.items():
+            setattr(booth, key, value)
+        booth.save()
+
+
