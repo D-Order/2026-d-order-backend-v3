@@ -275,7 +275,7 @@ class CsrfTokenViewTest(APITestCase):
 
     def test_get_csrf_token(self):
         """CSRF 토큰 획득 테스트"""
-        response = self.client.post(self.csrf_url)
+        response = self.client.get(self.csrf_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('csrftoken', response.cookies) 
+        self.assertIn('csrfToken', response.data) 
