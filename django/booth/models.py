@@ -24,13 +24,12 @@ class Booth(models.Model):
     table_limit_hours = models.DecimalField(max_digits=4, decimal_places=2)
 
     # 요금 정보
-    SEAT_TYPE_CHOICES = [
-        ('NO', 'No Seat Fee'),
-        ('PP', 'Seat Fee Per Person'),
-        ('PT', 'Seat Fee Per Table'),
-    ]
+    class SEAT_TYPE(models.TextChoices):
+        NO = 'NO', 'No Seat Fee'
+        PP = 'PP', 'Seat Fee Per Person'
+        PT = 'PT', 'Seat Fee Per Table'
 
-    seat_type = models.CharField(max_length=2, choices=SEAT_TYPE_CHOICES, default='NO')
+    seat_type = models.CharField(max_length=2, choices=SEAT_TYPE.choices, default='NO')
     seat_fee_person = models.IntegerField(null=True, blank=True)
     seat_fee_table = models.IntegerField(null=True, blank=True)
 
