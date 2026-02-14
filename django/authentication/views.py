@@ -2,8 +2,7 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
-
-import jwt
+from django.middleware.csrf import get_token
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -255,13 +254,18 @@ class TokenRefreshView(APIView):
 
 
 class CsrfTokenView(APIView):
+    """
+    CSRF 토큰 발급
+
+    GET /api/v3/auth/csrf-token/
+
+    POST/PUT/PATCH/DELETE 요청 시 X-CSRFToken 헤더에 포함 필요
+    """
     permission_classes = [AllowAny]
 
-    @method_decorator(ensure_csrf_cookie)
-    def post(self, request):
+    def get(self, request):
+        """CSRF 토큰 발급"""
+        csrf_token = get_token(request)
         return Response({
-            "message": "CSRF 토큰 발급 성공",
-            "data": {
-                "csrf_token": request.META.get("CSRF_COOKIE"),
-            }
+            "csrfToken": csrf_token
         }, status=status.HTTP_200_OK)
