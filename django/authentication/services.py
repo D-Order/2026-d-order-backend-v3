@@ -5,32 +5,42 @@ import jwt
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.exceptions import TokenError
 
-from authentication.serializers import UserBoothSignupSerializer
-
 class AuthService:
 
     @staticmethod
-    def signup_user(validated_data):
+    @transaction.atomic  # 중간에 실패할 경우 DB 적용 안함
+    def signup_user(username, password, booth_data):
         """
-        회원가입 처리
+        회원가입 처리 (User + Booth + Menu + Table 생성)
 
         Args:
-            validated_data: UserBoothSignupSerializer의 validated_data
+            username: 사용자 아이디
+            password: 비밀번호
+            booth_data: Booth 정보 dict
 
         Returns:
             user: 생성된 User 객체
+
+        Raises:
+            ValueError: 중복된 아이디 등
         """
-        
 
-        serializer = UserBoothSignupSerializer(data=validated_data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
+        # 1. 아이디 중복 체크
+        if User.objects.filter(username=username).exists():
+            raise ValueError("이미 사용 중인 아이디입니다")
 
-        return serializer.instance
+        # 2. User 생성
+        user = User.objects.create_user(username=username, password=password)
+
+        from booth.services import BoothService
+        booth = BoothService.create_booth_for_user(user, booth_data)
+
+        return user
 
     @staticmethod
     def issue_tokens(user):

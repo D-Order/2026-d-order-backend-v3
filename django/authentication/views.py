@@ -21,7 +21,6 @@ class SignupView(APIView):
 
     def post(self, request):
         """회원가입 처리"""
-
         # 1. 입력 검증 (Serializer)
         serializer = UserBoothSignupSerializer(data=request.data)
         if not serializer.is_valid():
@@ -30,29 +29,39 @@ class SignupView(APIView):
                 "data": serializer.errors,
             }, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2. 회원가입 처리 (Service)
-        user = AuthService.signup_user(serializer.validated_data)
+        try:
+            # 2. 회원가입 처리 (Service)
+            user = AuthService.signup_user(
+                username=serializer.validated_data['username'],
+                password=serializer.validated_data['password'],
+                booth_data=serializer.validated_data['booth_data']
+            )
 
-        # 3. 토큰 발급 (Service)
-        tokens = AuthService.issue_tokens(user)
+            # 3. 토큰 발급 (Service)
+            tokens = AuthService.issue_tokens(user)
 
-        # 4. 응답 생성
-        response = Response({
-            "message": "회원가입이 완료되었습니다.",
-            "data": {
-                "username": user.username,
-                "booth_id": user.id,
-            },
-        }, status=status.HTTP_201_CREATED)
+            # 4. 응답 생성
+            response = Response({
+                "message": "회원가입이 완료되었습니다.",
+                "data": {
+                    "username": user.username,
+                    "booth_id": user.id,
+                },
+            }, status=status.HTTP_201_CREATED)
 
-        # 5. 쿠키 설정 (Utils)
-        set_jwt_cookies(
-            response,
-            access_token=tokens['access_token'],
-            refresh_token=tokens['refresh_token']
-        )
+            # 5. 쿠키 설정 (Utils)
+            set_jwt_cookies(
+                response,
+                access_token=tokens['access_token'],
+                refresh_token=tokens['refresh_token']
+            )
 
-        return response
+            return response
+
+        except ValueError as e:
+            return Response({
+                "message": str(e),
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CheckUsernameView(APIView):
