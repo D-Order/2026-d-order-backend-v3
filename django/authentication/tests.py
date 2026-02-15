@@ -12,7 +12,7 @@ class SignupViewTest(APITestCase):
     """회원가입 API 테스트"""
 
     def setUp(self):
-        self.signup_url = '/api/v3/auth/signup/'
+        self.signup_url = '/api/v3/django/auth/signup/'
         self.valid_data = {
             "username": "testuser",
             "password": "testpass123",
@@ -129,7 +129,7 @@ class SignupViewTest(APITestCase):
 
 class CheckUsernameViewTest(APITestCase):
     def setUp(self):
-        self.username_check_url = '/api/v3/auth/check-username/'
+        self.username_check_url = '/api/v3/django/auth/check-username/'
         User.objects.create_user(username='existinguser', password='testpass')
 
     def test_username_parameter_missing(self):
@@ -162,7 +162,7 @@ class CheckUsernameViewTest(APITestCase):
 
 class AuthApiViewTest(APITestCase):
     def setUp(self):
-        self.auth_url = '/api/v3/auth/'
+        self.auth_url = '/api/v3/django/auth/'
         self.username = 'testuser'
         self.password = 'testpass123'
         User.objects.create_user(username=self.username, password=self.password)
@@ -226,7 +226,7 @@ class AuthApiViewTest(APITestCase):
 
         # 토큰 유효성 확인 요청 (POST /api/v3/auth/refresh/)
         response = self.client.post(
-            '/api/v3/auth/refresh/',
+            '/api/v3/django/auth/refresh/',
             HTTP_COOKIE=f'access_token={access_token}'
         )
 
@@ -236,7 +236,7 @@ class AuthApiViewTest(APITestCase):
     def test_token_verify_missing_token(self):
         """토큰 없이 유효성 확인 시 실패 테스트"""
         with suppress_request_warnings():
-            response = self.client.post('/api/v3/auth/refresh/')
+            response = self.client.post('/api/v3/django/auth/refresh/')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
     
@@ -271,7 +271,7 @@ class AuthApiViewTest(APITestCase):
 class CsrfTokenViewTest(APITestCase):
 
     def setUp(self):
-        self.csrf_url = '/api/v3/auth/csrf-token/'
+        self.csrf_url = '/api/v3/django/auth/csrf-token/'
 
     def test_get_csrf_token(self):
         """CSRF 토큰 획득 테스트"""
