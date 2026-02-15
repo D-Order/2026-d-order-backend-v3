@@ -11,11 +11,18 @@ class BoothSerializer(serializers.ModelSerializer):
         fields = [
             'name',
             'table_max_cnt',
+            'bank',
             'account',
             'depositor',
-            'bank',
             'seat_type',
             'seat_fee_person',
             'seat_fee_table',
             'table_limit_hours'
         ]
+
+class BoothUpdateSerializer(BoothSerializer):
+      """
+      PATCH 전용 (BoothSerializer 상속)
+      - table_max_cnt만 read_only로 오버라이드
+      """
+      table_max_cnt = serializers.IntegerField(read_only=True) 
