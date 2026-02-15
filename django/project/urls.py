@@ -23,10 +23,10 @@ from django.conf.urls.static import static
 from .views import health_check
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/v3/auth/', include('authentication.urls')),
-    path('api/v3/booth/', include('booth.urls')),
-    path('health/', health_check),
+    path('django/admin/', admin.site.urls),
+    path('api/v3/django/auth/', include('authentication.urls')),
+    path('api/v3/django/booth/', include('booth.urls')),
+    path('django/health/', health_check),
 ]
 
 if settings.DEBUG: # 배포 환경에선 ngingx가 static/media 처리할거라서 이 부분은 무시할거
