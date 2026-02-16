@@ -8,6 +8,8 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 
 import java.util.HashMap;
 import java.util.List;
@@ -33,7 +35,7 @@ public class AuthService {
      * @return CSRF 토큰 정보 (csrfToken, csrfCookie)
      */
     private Map<String, String> getCsrfToken() {
-        String url = djangoApiBaseUrl + "/api/v3/auth/csrf-token/";
+        String url = djangoApiBaseUrl + "/api/v3/django/auth/csrf-token/";
 
         try {
             ResponseEntity<Map> response = restTemplate.exchange(
@@ -78,35 +80,33 @@ public class AuthService {
      * @return Django 응답 데이터
      */
     public Map<String, Object> login(String username, String password, HttpServletResponse response) {
+        String url = djangoApiBaseUrl + "/api/v3/django/auth/";
 
-        String url = djangoApiBaseUrl + "/api/v3/auth/";
-
-        // 1. CSRF 토큰 먼저 발급
-        Map<String, String> csrfData = getCsrfToken();
-        String csrfToken = csrfData.get("csrfToken");
-        String csrfCookie = csrfData.get("csrfCookie");
-
-        // 2. 요청 바디 생성
+            // 1. CSRF 토큰 먼저 발급
+            Map<String, String> csrfData = getCsrfToken();
+            String csrfToken = csrfData.get("csrfToken");
+            String csrfCookie = csrfData.get("csrfCookie");
+        // 2. 요청 바디 생성 (JSON 문자열로 직접 변환)
         Map<String, String> requestBody = new HashMap<>();
         requestBody.put("username", username);
         requestBody.put("password", password);
 
+        String jsonBody;
+        try {
+            jsonBody = new ObjectMapper().writeValueAsString(requestBody);
+        } catch (Exception e) {
+            throw new RuntimeException("JSON 변환 실패", e);
+        }
+
         // 3. 헤더 설정 (CSRF 토큰 포함)
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        if (csrfToken != null) headers.set("X-CSRFToken", csrfToken);
+        if (csrfCookie != null) headers.set(HttpHeaders.COOKIE, csrfCookie);
 
-        if (csrfToken != null) {
-            headers.set("X-CSRFToken", csrfToken);
-        }
-        if (csrfCookie != null) {
-            headers.set(HttpHeaders.COOKIE, csrfCookie);
-        }
+        log.info("[BFF-LOGIN] Spring → Django 로그인 요청: body={}, headers={}", jsonBody, headers);
 
-        // ======= 요청 body와 headers를 info 로그로 출력 =======
-        log.info("[BFF-LOGIN] Spring → Django 로그인 요청: body={}, headers={}", requestBody, headers);
-        // =============================================
-
-        HttpEntity<Map<String, String>> entity = new HttpEntity<>(requestBody, headers);
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
 
         try {
             // 4. Django API 호출
@@ -148,7 +148,7 @@ public class AuthService {
      * @return Django 응답 데이터
      */
     public Map<String, Object> refreshToken(String accessToken, String refreshToken, HttpServletResponse response) {
-        String url = djangoApiBaseUrl + "/api/v3/auth/refresh/";
+        String url = djangoApiBaseUrl + "/api/v3/django/auth/refresh/";
 
         // 1. CSRF 토큰 발급
         Map<String, String> csrfData = getCsrfToken();

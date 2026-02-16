@@ -82,7 +82,14 @@ public class JwtUtil {
      */
     public Long getUserIdFromToken(String token) {
         Claims claims = parseClaims(token);
-        return claims.get("user_id", Long.class);
+        Object userIdObj = claims.get("user_id");
+        if (userIdObj instanceof String) {
+            return Long.valueOf((String) userIdObj);
+        } else if (userIdObj instanceof Number) {
+            return ((Number) userIdObj).longValue();
+        } else {
+            throw new IllegalArgumentException("user_id claim 타입 변환 실패: " + userIdObj);
+        }
     }
 
     /**
