@@ -265,6 +265,12 @@ LOGGING = {
     },
 }
 
+# Debugger 설정
+if IS_LOCAL:
+    INSTALLED_APPS += ['debug_toolbar']
+    MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+    INTERNAL_IPS = ['127.0.0.1', 'localhost']
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
@@ -389,3 +395,4 @@ SECURE_CONTENT_SECURITY_POLICY = {
 
 # Clickjacking 보호
 X_FRAME_OPTIONS = 'DENY'
+
