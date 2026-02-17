@@ -217,7 +217,7 @@ class TableManagementViewSetTestCase(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('6개의 테이블이 병합되었습니다.', response.data)
+        self.assertEqual('6개의 테이블이 병합되었습니다.', response.data.get('message', ''))
 
         # TableGroup 생성 확인 / 기존 그룹 삭제임
         self.assertEqual(TableGroup.objects.count(), 1)
