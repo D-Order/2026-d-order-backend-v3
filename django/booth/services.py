@@ -14,7 +14,7 @@ class BoothService:
             생성한 Booth 객체
         """
         # from menu.models import Menu  # TODO: Menu 모델 구현 후 활성화
-        # from table.models import Table  # TODO: Table 모델 구현 후 활성화
+        from table.models import Table  
 
         # 3. Booth 객체 생성
         booth = Booth.objects.create(
@@ -52,15 +52,12 @@ class BoothService:
         #         menu_amount=999999
         #     )
 
-        # TODO: Table 모델 작성 후 다시 구현
-        # 이것도 여기 두는게 나을 듯
-        # 5. 테이블 자동 생성
-        # for i in range(1, booth.table_max_cnt + 1):
-        #     Table.objects.create(
-        #         booth=booth,
-        #         table_num=i,
-        #         status="out",
-        #     )
+        # 테이블 생성
+        for i in range(1, booth.table_max_cnt + 1):
+            Table.objects.create(
+                booth=booth,
+                table_num=i
+            )
 
         return booth
 
