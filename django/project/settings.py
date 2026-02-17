@@ -265,11 +265,10 @@ LOGGING = {
     },
 }
 
-# Debugger 설정
+# Silk 프로파일링 설정 (로컬 전용)
 if IS_LOCAL:
-    INSTALLED_APPS += ['debug_toolbar']
-    MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
-    INTERNAL_IPS = ['127.0.0.1', 'localhost']
+    INSTALLED_APPS += ['silk']
+    MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
