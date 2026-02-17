@@ -29,6 +29,10 @@ urlpatterns = [
     path('health/django/', health_check),
 ]
 
-if settings.DEBUG: # 배포 환경에선 ngingx가 static/media 처리할거라서 이 부분은 무시할거
+if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.IS_LOCAL:
+    import debug_toolbar
+    urlpatterns = [path('__debug__/', include(debug_toolbar.urls))] + urlpatterns
