@@ -8,10 +8,6 @@ from rest_framework.exceptions import ValidationError, NotFound
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-
-
-logger = logging.getLogger(__name__)
-
 class TableService:
 
     @staticmethod
@@ -136,22 +132,20 @@ class TableService:
             ended_at__isnull=True
         )
         
+        # XXX : django Lazy Loading 관련
+        # 캐시 사용하기
         active_usages_cache = list(active_usages)  # 업데이트 전에 사용 기록을 캐싱
 
         updated_count = active_usages.update(ended_at=now_time)
-        logger.info(f"{updated_count}개의 사용 기록이 종료 처리되었습니다.")
         
 
         # usage_minutes 계산 (bulk_update 사용)
         if updated_count > 0:
             # 업데이트된 usage들을 다시 조회 (ended_at이 이미 설정됨)
-            logger.info(f"사용 기록 {updated_count}개에 대해 사용 시간 계산을 시작합니다.")
             for usage in active_usages_cache:
-                logger.info(f"테이블 {usage.table.table_num} 사용 기록 업데이트: now_time={now_time}, started_at={usage.started_at}")
                 usage.usage_minutes = int(
                     (now_time - usage.started_at).total_seconds() / 60
                 )
-                logger.info(f"테이블 {usage.table.table_num} 사용 기록 계산 완료: usage_minutes={usage.usage_minutes}")
     
             TableUsage.objects.bulk_update(active_usages_cache, fields=['usage_minutes'])
 
@@ -215,21 +209,19 @@ class TableService:
             ).filter(
                 Q(group_id__in=groups_to_merge) | Q(table_num__in=table_nums)
             )
-            logger.info(f" {[f"테이블 번호 : {table.table_num} (group: {table.group.id}) \n" for table in all_tables]}")
+            
         else:
             # 모두 개별 테이블
             all_tables = requested_tables
 
         # 6. 가장 낮은 번호의 테이블을 대표로 선택
         representative_table = all_tables.order_by('table_num').first()
-        logger.info(f"대표 테이블로 선택된 테이블 번호: {representative_table.table_num}")
+        
         
         # 9. 새 그룹 생성
         table_group = TableGroup.objects.create(representative_table=representative_table)
-        logger.info(f" 테이블 그룹 생성 {table_group.id} \n")
-        logger.info(f" 대표 테이블 번호 : {representative_table.table_num} \n")
-        logger.info(f" 병합 대상 테이블 번호 : {[table.table_num for table in all_tables]} \n")
         
+        # XXX : django Lazy Loading 관련
         # 아래 로직이 실행되면 기존 그룹이 다 해제됨
         # DJango의 Lazy Loading으로 return시에 합치기 전 그룹 정보로 접근하면 갯수가 안 맞게됨
         # 미리 그룹 갯수 받아서 return하는거로 해결~ / 해결이라고 해도 될지 모르겠음
@@ -237,9 +229,6 @@ class TableService:
         all_tables_count = all_tables.count() 
 
         all_tables.update(group=table_group)
-
-        logger.info(f" 테이블 그룹 연결 완료 \n")
-        logger.info(f" 그룹에 연결된 테이블 번호 : {[table.table_num for table in all_tables]} \n")
         
         
         # 8. 기존 그룹 삭제
