@@ -26,6 +26,7 @@ urlpatterns = [
     path('django/admin/', admin.site.urls),
     path('api/v3/django/auth/', include('authentication.urls')),
     path('api/v3/django/booth/', include('booth.urls')),
+    path('api/v3/django/booth/', include('table.urls')),
     path('health/django/', health_check),
 ]
 

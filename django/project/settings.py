@@ -269,6 +269,7 @@ LOGGING = {
 if IS_LOCAL:
     INSTALLED_APPS += ['silk']
     MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
+    SILKY_PYTHON_PROFILER = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
