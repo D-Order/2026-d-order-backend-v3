@@ -76,8 +76,14 @@ class SetMenuService:
     @staticmethod
     @transaction.atomic
     def update_set_menu(set_menu, validated_data):
-        """세트메뉴 수정"""
+        """세트메뉴 수정 (이미지 삭제 포함)"""
         set_items_data = validated_data.pop('set_items', None)
+        
+        # 이미지 삭제 처리
+        image_delete = validated_data.pop('image_delete', False)
+        if image_delete and set_menu.image:
+            set_menu.image.delete(save=False)
+            set_menu.image = None
         
         # SetMenu 필드 업데이트
         for attr, value in validated_data.items():
@@ -97,6 +103,16 @@ class SetMenuService:
         return set_menu
     
     @staticmethod
+    @transaction.atomic
     def delete_set_menu(set_menu):
-        """세트메뉴 삭제"""
+        """
+        세트메뉴 삭제
+        - 이미지 파일도 함께 삭제
+        - SetMenuItem은 CASCADE로 자동 삭제됨
+        """
+        # 이미지 파일 삭제
+        if set_menu.image:
+            set_menu.image.delete(save=False)
+        
+        # DB 레코드 삭제 (SetMenuItem은 CASCADE로 자동 삭제)
         set_menu.delete()
