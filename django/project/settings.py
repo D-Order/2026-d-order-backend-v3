@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'core',
     'booth',
     'table',
+    'menu',
 
     # S3
     'storages',
@@ -195,6 +196,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
+    'EXCEPTION_HANDLER': 'utils.exceptions.custom_exception_handler',
 }
 
 # Default primary key field type
