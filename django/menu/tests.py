@@ -510,6 +510,276 @@ class MenuDeleteAPITest(APITestCase):
 
 
 @override_settings(STORAGES=IN_MEMORY_STORAGES)
+class SetMenuAPITest(APITestCase):
+    """세트메뉴 등록/수정/삭제 API 통합 테스트"""
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username='setuser', password='setpass123')
+        cls.booth = Booth.objects.create(
+            user=cls.user,
+            name='세트부스',
+            table_max_cnt=5,
+            account='111222333',
+            depositor='세트주인',
+            bank='카카오',
+            seat_type='NO',
+            seat_fee_person=0,
+            seat_fee_table=0,
+            table_limit_hours=1.0
+        )
+        cls.menu1 = Menu.objects.create(booth=cls.booth, name='단품1', category='MENU', price=1000, stock=10)
+        cls.menu2 = Menu.objects.create(booth=cls.booth, name='단품2', category='MENU', price=2000, stock=5)
+        cls.menu3 = Menu.objects.create(booth=cls.booth, name='단품3', category='MENU', price=3000, stock=0)
+        cls.other_user = User.objects.create_user(username='otheruser', password='otherpass123')
+        cls.other_booth = Booth.objects.create(
+            user=cls.other_user,
+            name='다른부스',
+            table_max_cnt=3,
+            account='444555666',
+            depositor='다른주인',
+            bank='농협',
+            seat_type='NO',
+            seat_fee_person=0,
+            seat_fee_table=0,
+            table_limit_hours=1.0
+        )
+        cls.other_menu = Menu.objects.create(booth=cls.other_booth, name='외부메뉴', category='MENU', price=5000, stock=10)
+
+    def setUp(self):
+        self.client.force_authenticate(user=self.user)
+        self.url = '/api/v3/django/booth/sets/'
+
+    def test_setmenu_create_success(self):
+        """세트메뉴 등록 성공"""
+        data = {
+            'name': '세트1',
+            'description': '맛있는 세트',
+            'price': 5000,
+            'set_items': [
+                {'menu_id': self.menu1.id, 'quantity': 2},
+                {'menu_id': self.menu2.id, 'quantity': 1}
+            ]
+        }
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['message'], '세트메뉴 등록 성공')
+        self.assertEqual(response.data['data']['name'], '세트1')
+        self.assertEqual(len(response.data['data']['set_items']), 2)
+
+    def test_setmenu_create_with_image(self):
+        """이미지 포함 세트메뉴 등록 성공"""
+        import json
+        data = {
+            'name': '세트2',
+            'description': '이미지세트',
+            'price': 8000,
+            'set_items': json.dumps([
+                {'menu_id': self.menu1.id, 'quantity': 1}
+            ]),
+            'image': create_test_image()
+        }
+        response = self.client.post(self.url, data, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data['data']['image'])
+
+    def test_setmenu_create_minimal(self):
+        """필수값만으로 세트메뉴 등록 성공"""
+        data = {
+            'name': '세트3',
+            'price': 1000,
+            'set_items': [
+                {'menu_id': self.menu1.id}
+            ]
+        }
+        response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['data']['name'], '세트3')
+
+    def test_setmenu_create_invalid_menu(self):
+        """존재하지 않는 menu_id 포함 시 400"""
+        data = {
+            'name': '세트4',
+            'price': 1000,
+            'set_items': [
+                {'menu_id': 99999}
+            ]
+        }
+        with suppress_request_warnings():
+            response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('set_items', response.data.get('errors', {}))
+
+    def test_setmenu_create_empty_items(self):
+        """set_items 빈 배열 시 400"""
+        data = {
+            'name': '세트5',
+            'price': 1000,
+            'set_items': []
+        }
+        with suppress_request_warnings():
+            response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('set_items', response.data.get('errors', {}))
+
+    def test_setmenu_create_unauthorized(self):
+        """비로그인 시 401"""
+        self.client.force_authenticate(user=None)
+        data = {
+            'name': '세트6',
+            'price': 1000,
+            'set_items': [{'menu_id': self.menu1.id}]
+        }
+        with suppress_request_warnings():
+            response = self.client.post(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_setmenu_update_success(self):
+        """세트메뉴 수정 성공 (이름/구성/가격 변경)"""
+        # 등록
+        setmenu = SetMenu.objects.create(booth=self.booth, name='수정세트', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        patch_data = {
+            'name': '수정된세트',
+            'price': 2000,
+            'set_items': [
+                {'menu_id': self.menu2.id, 'quantity': 2}
+            ]
+        }
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data']['name'], '수정된세트')
+        self.assertEqual(len(response.data['data']['set_items']), 1)
+        self.assertEqual(response.data['data']['set_items'][0]['menu_id'], self.menu2.id)
+
+    def test_setmenu_update_partial(self):
+        """세트메뉴 부분 수정 (이름만)"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='부분수정', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        patch_data = {'name': '이름만수정'}
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data']['name'], '이름만수정')
+
+    def test_setmenu_update_image_delete(self):
+        """세트메뉴 이미지 삭제"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='이미지세트', price=1000)
+        setmenu.image = create_test_image()
+        setmenu.save()
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        patch_data = {'image_delete': True}
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        setmenu.refresh_from_db()
+        self.assertFalse(setmenu.image)
+
+    def test_setmenu_update_forbidden(self):
+        """다른 부스 세트메뉴 수정 시 403"""
+        setmenu = SetMenu.objects.create(booth=self.other_booth, name='외부세트', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.other_menu, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        patch_data = {'name': '수정시도'}
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data['code'], 'PERMISSION_DENIED')
+
+    def test_setmenu_update_not_found(self):
+        """존재하지 않는 세트메뉴 수정 시 404"""
+        url = '/api/v3/django/booth/sets/99999/'
+        patch_data = {'name': '없는세트'}
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['code'], 'MENU_NOT_FOUND')
+
+    def test_setmenu_delete_success(self):
+        """세트메뉴 삭제 성공"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='삭제세트', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(SetMenu.objects.filter(id=setmenu.id).exists())
+        self.assertFalse(SetMenuItem.objects.filter(set_menu_id=setmenu.id).exists())
+
+    def test_setmenu_delete_forbidden(self):
+        """다른 부스 세트메뉴 삭제 시 403"""
+        setmenu = SetMenu.objects.create(booth=self.other_booth, name='외부세트', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.other_menu, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data['code'], 'PERMISSION_DENIED')
+
+    def test_setmenu_delete_not_found(self):
+        """존재하지 않는 세트메뉴 삭제 시 404"""
+        url = '/api/v3/django/booth/sets/99999/'
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['code'], 'MENU_NOT_FOUND')
+
+    def test_setmenu_delete_twice(self):
+        """이미 삭제된 세트메뉴 다시 삭제 시 404"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='삭제2회', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response2 = self.client.delete(url)
+        self.assertEqual(response2.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response2.data['code'], 'MENU_NOT_FOUND')
+
+    def test_setmenu_soldout_logic(self):
+        """구성 메뉴 중 하나라도 품절이면 is_soldout True"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='품절세트', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu3, quantity=1)  # stock=0
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        response = self.client.patch(url, {'name': '품절세트수정'}, format='json')
+        self.assertTrue(response.data['data']['is_soldout'])
+
+    def test_setmenu_origin_price(self):
+        """origin_price 계산 검증"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='원가세트', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=2)  # 1000*2
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu2, quantity=1)  # 2000*1
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        response = self.client.patch(url, {'name': '원가세트수정'}, format='json')
+        self.assertEqual(response.data['data']['origin_price'], 4000)
+
+    def test_setmenu_update_invalid_items(self):
+        """set_items 잘못된 값(빈배열) 시 400"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='잘못세트', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        patch_data = {'set_items': []}
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('set_items', response.data.get('errors', {}))
+
+    def test_setmenu_update_invalid_menu(self):
+        """set_items에 없는 menu_id 포함 시 400"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='잘못세트2', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        patch_data = {'set_items': [{'menu_id': 99999}]}
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('set_items', response.data.get('errors', {}))
+
+    def test_setmenu_update_image_modify_forbidden(self):
+        """이미지 직접 수정 시도 시 400"""
+        setmenu = SetMenu.objects.create(booth=self.booth, name='이미지수정불가', price=1000)
+        SetMenuItem.objects.create(set_menu=setmenu, menu=self.menu1, quantity=1)
+        url = f'/api/v3/django/booth/sets/{setmenu.id}/'
+        patch_data = {'image': create_test_image()}
+        response = self.client.patch(url, patch_data, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('image', response.data.get('errors', {}))
+
+    # 기타 추가 검증 필요시 여기에 작성
+
+
 class MenuModelTest(APITestCase):
     """Menu 모델 테스트"""
     
