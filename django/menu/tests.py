@@ -1,3 +1,62 @@
+# 사용자 메뉴판 조회 API 테스트 (UserMenuListAPIView)
+
+from rest_framework.test import APITestCase
+from rest_framework import status
+from table.models import Table, TableUsage
+from menu.models import SetMenu
+from django.utils import timezone
+
+class UserMenuListAPITest(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='testpass123')
+        self.booth = Booth.objects.create(
+            user=self.user,
+            name='테스트부스',
+            table_max_cnt=10,
+            account='1234567890',
+            depositor='홍길동',
+            bank='신한은행',
+            seat_type='PP',
+            seat_fee_person=8000,
+            seat_fee_table=0,
+            table_limit_hours=2.0
+        )
+        self.table = Table.objects.create(booth=self.booth, table_num=3)
+        self.menu = Menu.objects.create(booth=self.booth, name='피자', category='MENU', price=20000, stock=5)
+        self.setmenu = SetMenu.objects.create(booth=self.booth, name='A세트', price=30000, description='세트 메뉴', image=None)
+        self.usage = TableUsage.objects.create(table=self.table, started_at=timezone.now())
+        self.url = f'/api/v3/django/booth/{self.booth.pk}/menu-list/'
+
+    def test_menu_list_without_table_num(self):
+        """table_num 없이 메뉴판 조회시 table_info 미포함, 메뉴 데이터만 반환"""
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('data', resp.data)
+        self.assertNotIn('table_info', resp.data)
+        self.assertIn('FEE', resp.data['data'])
+        self.assertIn('MENU', resp.data['data'])
+
+    def test_menu_list_with_valid_table_num(self):
+        """유효한 table_num으로 조회시 table_info 포함, usage id 포함"""
+        resp = self.client.get(self.url + '?table_num=3')
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn('table_info', resp.data)
+        self.assertEqual(resp.data['table_info']['table_number'], 3)
+        self.assertEqual(resp.data['table_info']['table_usage_id'], self.usage.id)
+        self.assertIn('FEE', resp.data['data'])
+        self.assertIn('MENU', resp.data['data'])
+
+    def test_menu_list_with_invalid_table_num(self):
+        """존재하지 않는 table_num으로 조회시 404 반환"""
+        resp = self.client.get(self.url + '?table_num=999')
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(resp.data['code'], 'TABLE_NOT_FOUND')
+
+    def test_menu_list_with_invalid_table_num_type(self):
+        """숫자가 아닌 table_num으로 조회시 400 반환"""
+        resp = self.client.get(self.url + '?table_num=abc')
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data['code'], 'TABLE_NUMBER_INVALID')
 import io
 from PIL import Image
 

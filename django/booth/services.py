@@ -1,20 +1,18 @@
 from booth.models import Booth
+from menu.models import Menu
 
 class BoothService:
 
     @staticmethod
     def create_booth_for_user(user, booth_data):
-        """유저 생성 시 부스 데이트 만드는 함수
-
+        """유저 생성 시 부스 데이터 만드는 함수
         Args:
             user (User): 유저 객체
             booth_data (dict): 부스 데이터
-
         Returns:
             생성한 Booth 객체
         """
-        # from menu.models import Menu  # TODO: Menu 모델 구현 후 활성화
-        from table.models import Table  
+        from table.models import Table
 
         # 3. Booth 객체 생성
         booth = Booth.objects.create(
@@ -30,27 +28,34 @@ class BoothService:
             seat_fee_table=booth_data.get('seat_fee_table'),
         )
 
-        # TODO: Menu 모델 확립 후 다시 구현
-        # 이건 여기 두는게 나을 듯
         # 4. 테이블 이용료 메뉴 자동 생성
-        # if booth.seat_type == "PP":
-        #     Menu.objects.create(
-        #         booth=booth,
-        #         menu_name="테이블 이용료(1인당)",
-        #         menu_description="좌석 이용 요금(1인 기준)",
-        #         menu_category="seat_fee",
-        #         menu_price=booth.seat_fee_person,
-        #         menu_amount=999999  # 사실상 무제한
-        #     )
-        # elif booth.seat_type == "PT":
-        #     Menu.objects.create(
-        #         booth=booth,
-        #         menu_name="테이블 이용료(테이블당)",
-        #         menu_description="좌석 이용 요금(테이블 기준)",
-        #         menu_category="seat_fee",
-        #         menu_price=booth.seat_fee_table,
-        #         menu_amount=999999
-        #     )
+        if booth.seat_type == "PP":
+            Menu.objects.create(
+                booth=booth,
+                name="테이블 이용료",
+                category="FEE",
+                description="인원 수",
+                price=booth.seat_fee_person or 0,
+                stock=9999
+            )
+        elif booth.seat_type == "PT":
+            Menu.objects.create(
+                booth=booth,
+                name="테이블 이용료",
+                category="FEE",
+                description="테이블",
+                price=booth.seat_fee_table or 0,
+                stock=9999
+            )
+        else:
+            Menu.objects.create(
+                booth=booth,
+                name="테이블 이용료",
+                category="FEE",
+                description="FREE",
+                price=0,
+                stock=9999
+            )
 
         # 테이블 생성
         for i in range(1, booth.table_max_cnt + 1):
@@ -58,19 +63,31 @@ class BoothService:
                 booth=booth,
                 table_num=i
             )
-
         return booth
 
     @staticmethod
     def update_booth(booth, booth_data):
-        """부스 마이페이지 데이터 업데이트
-
+        """부스 마이페이지 데이터 업데이트 및 FEE 메뉴 동기화
         Args:
             booth_data (dict): 변경할 부스 데이터
         """
-        # TODO : 테이블 요금 변경 시 menu에 연결된 기본 요금 변경 필요...
+        # 기존 값 변경
         for key, value in booth_data.items():
             setattr(booth, key, value)
         booth.save()
+
+        # FEE 메뉴 동기화
+        fee_menu = Menu.objects.filter(booth=booth, category="FEE").first()
+        if fee_menu:
+            if booth.seat_type == "PP":
+                fee_menu.price = booth.seat_fee_person or 0
+                fee_menu.description = "인원 수"
+            elif booth.seat_type == "PT":
+                fee_menu.price = booth.seat_fee_table or 0
+                fee_menu.description = "테이블"
+            else:
+                fee_menu.price = 0
+                fee_menu.description = "FREE"
+            fee_menu.save()
 
 
