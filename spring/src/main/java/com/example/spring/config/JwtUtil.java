@@ -33,13 +33,13 @@ public class JwtUtil {
     /**
      * Access Token 생성
      */
-    public String generateAccessToken(Long userId, String username) {
+    public String generateAccessToken(Long boothId, String username) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + jwtProperties.getAccessTokenExpiration());
 
         return Jwts.builder()
-                .subject(String.valueOf(userId))
-                .claim("user_id", userId)
+                .subject(String.valueOf(boothId))
+                .claim("booth_id", boothId)
                 .claim("username", username)
                 .claim("token_type", "access")
                 .issuedAt(now)
@@ -51,13 +51,13 @@ public class JwtUtil {
     /**
      * Refresh Token 생성
      */
-    public String generateRefreshToken(Long userId, String username) {
+    public String generateRefreshToken(Long boothId, String username) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + jwtProperties.getRefreshTokenExpiration());
 
         return Jwts.builder()
-                .subject(String.valueOf(userId))
-                .claim("user_id", userId)
+                .subject(String.valueOf(boothId))
+                .claim("booth_id", boothId)
                 .claim("username", username)
                 .claim("token_type", "refresh")
                 .issuedAt(now)
@@ -80,25 +80,19 @@ public class JwtUtil {
     /**
      * 토큰에서 사용자 ID 추출
      */
-    public Long getUserIdFromToken(String token) {
+    public Long getBoothIdFromToken(String token) {
         Claims claims = parseClaims(token);
-        Object userIdObj = claims.get("user_id");
-        if (userIdObj instanceof String) {
-            return Long.valueOf((String) userIdObj);
-        } else if (userIdObj instanceof Number) {
-            return ((Number) userIdObj).longValue();
+        Object boothIdObj = claims.get("user_id"); // 실제 claim 이름은 user_id
+        if (boothIdObj instanceof String) {
+            return Long.valueOf((String) boothIdObj);
+        } else if (boothIdObj instanceof Number) {
+            return ((Number) boothIdObj).longValue();
         } else {
-            throw new IllegalArgumentException("user_id claim 타입 변환 실패: " + userIdObj);
+            throw new IllegalArgumentException("booth_id claim 타입 변환 실패: " + boothIdObj);
         }
     }
 
-    /**
-     * 토큰에서 username 추출
-     */
-    public String getUsernameFromToken(String token) {
-        Claims claims = parseClaims(token);
-        return claims.get("username", String.class);
-    }
+    
 
     /**
      * 토큰 유효성 검증
