@@ -80,6 +80,8 @@ INSTALLED_APPS = [
     'core',
     'booth',
     'table',
+    'cart',
+    'coupon',
     'menu',
 
     # S3
