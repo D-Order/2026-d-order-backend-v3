@@ -243,4 +243,4 @@ class TableService:
         if groups_to_merge:
             TableGroup.objects.filter(pk__in=groups_to_merge).delete()
         
-        return representative_table.id, all_tables_count
+        return representative_table.table_num, all_tables_count
