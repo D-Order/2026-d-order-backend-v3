@@ -52,10 +52,10 @@ class Command(BaseCommand):
                 booth_id, domain, action = match.groups()
 
                 # WebSocket 그룹명
-                group_name = f"booth_{booth_id}"
+                group_name = f"booth_{booth_id}.{domain}"
 
                 # 이벤트 타입: order_new, staffcall_newcall 등
-                event_type = f"{domain}_{action}"
+                event_type = f"{action}"
 
                 # WebSocket 그룹으로 브로드캐스트
                 async_to_sync(channel_layer.group_send)(
