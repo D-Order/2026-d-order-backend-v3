@@ -30,7 +30,7 @@ urlpatterns = [
     path('api/v3/django/booth/', include('menu.urls')),
     path('api/v3/django/cart/', include('cart.urls')),
     path('api/v3/django/coupon/', include('coupon.urls')),
-    path('health/django/', health_check),
+    path('health/', health_check),
 ]
 
 if settings.DEBUG:
