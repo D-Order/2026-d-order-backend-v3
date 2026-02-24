@@ -8,6 +8,8 @@ from rest_framework.exceptions import ValidationError, NotFound
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
+
+
 class TableService:
 
     @staticmethod
@@ -119,13 +121,20 @@ class TableService:
                 groups_to_delete.add(table.group.pk)
 
         if groups_to_delete:
-            # 해당 그룹의 모든 테이블에서 그룹 연결 해제
-            Table.objects.filter(group_id__in=groups_to_delete).update(group=None)
-            # 그룹 삭제
+            # 그룹에 속한 모든 테이블로 확장 (병합 테이블 포함)
+            tables = Table.objects.filter(
+                booth=booth,
+                group_id__in=groups_to_delete
+            )
+            # update 전에 ID 캐싱 (update 후 queryset 재평가 시 group=None으로 결과 0이 됨)
+            table_ids = list(tables.values_list('pk', flat=True))
+            tables.update(group=None)
             TableGroup.objects.filter(pk__in=groups_to_delete).delete()
+            # ID 기준으로 재조회
+            tables = Table.objects.filter(pk__in=table_ids)
 
+        found_count = tables.count()
 
-        
         now_time = now()
         active_usages = TableUsage.objects.filter(
             table__in=tables,
@@ -152,7 +161,6 @@ class TableService:
 
         # 6. 테이블 상태 일괄 초기화
         tables.update(status=Table.Status.ACTIVE)
-
         return found_count
 
 
@@ -235,4 +243,4 @@ class TableService:
         if groups_to_merge:
             TableGroup.objects.filter(pk__in=groups_to_merge).delete()
         
-        return all_tables_count
+        return representative_table.id, all_tables_count
