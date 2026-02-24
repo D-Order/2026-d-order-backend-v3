@@ -58,13 +58,12 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         table_nums = request.data.get('table_nums', [])
         booth = request.user.booth
 
-        # Service 레이어 호출 (검증 + 비즈니스 로직)
-        representive_table_id, count = TableService.merge_tables(booth, table_nums)
+        representive_table_num, count = TableService.merge_tables(booth, table_nums)
 
         return Response({
             'message': '테이블이 병합되었습니다.',
             'data' : {
-                'representive' : representive_table_id,
+                'representive_table_num' : representive_table_num,
                 'merge_table_cnt' : count
             }
         }, status=status.HTTP_200_OK)

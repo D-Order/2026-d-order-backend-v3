@@ -242,7 +242,7 @@ class TableMergeTestCase(APITestCase):
 
         group = TableGroup.objects.first()
         self.assertEqual(group.representative_table.table_num, 1)
-        self.assertEqual(response.data['data']['representive'], group.representative_table.id)
+        self.assertEqual(response.data['data']['representive_table_num'], group.representative_table.table_num)
 
     def test_merge_tables_same_group(self):
         """병합된 테이블들이 동일 그룹 소속"""
