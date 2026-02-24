@@ -1,11 +1,14 @@
 # 사용자 메뉴판 조회 API 테스트 (UserMenuListAPIView)
 
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from rest_framework import status
 from table.models import Table, TableUsage
 from menu.models import SetMenu
 from django.utils import timezone
+from core.test_utils import IN_MEMORY_STORAGES
 
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
 class UserMenuListAPITest(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='testpass123')
@@ -838,7 +841,7 @@ class SetMenuAPITest(APITestCase):
 
     # 기타 추가 검증 필요시 여기에 작성
 
-
+@override_settings(STORAGES=IN_MEMORY_STORAGES) 
 class MenuModelTest(APITestCase):
     """Menu 모델 테스트"""
     
