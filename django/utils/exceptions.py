@@ -48,4 +48,8 @@ def custom_exception_handler(exc, context):
             "code": "INTERNAL_SERVER_ERROR"
         }, status=500)
     
+    # detail → message 키 변환
+    if response is not None and 'detail' in response.data:
+        response.data['message'] = response.data.pop('detail')
+
     return response
