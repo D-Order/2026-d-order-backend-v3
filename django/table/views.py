@@ -15,7 +15,7 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """현재 로그인한 사용자의 부스 테이블만 조회"""
-        return Table.objects.filter(booth=self.request.user.booth)
+        return Table.objects.filter(booth=self.request.user.booth).order_by('table_num')
 
 
     @action(detail=False, methods=['post'])
@@ -37,7 +37,10 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         count = TableService.reset_tables(booth, table_nums)
 
         return Response({
-            'message': f'{count}개의 테이블이 초기화되었습니다.'
+            'message': '테이블이 초기화되었습니다.',
+            'data' : {
+                'reset_table_cnt' : count
+            }
         }, status=status.HTTP_200_OK)
     
     @action(detail=False, methods=['post'])
@@ -56,10 +59,14 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         booth = request.user.booth
 
         # Service 레이어 호출 (검증 + 비즈니스 로직)
-        count = TableService.merge_tables(booth, table_nums)
+        representive_table_id, count = TableService.merge_tables(booth, table_nums)
 
         return Response({
-            'message': f'{count}개의 테이블이 병합되었습니다.'
+            'message': '테이블이 병합되었습니다.',
+            'data' : {
+                'representive' : representive_table_id,
+                'merge_table_cnt' : count
+            }
         }, status=status.HTTP_200_OK)
 
 
@@ -93,6 +100,7 @@ class TableEnterAPIView(views.APIView):
         # ValidationError, NotFound 예외는 DRF가 자동으로 적절한 HTTP 응답으로 변환
         table_usage = TableService.init_or_enter_table(booth, table_num)
 
+        
         # 성공 응답
         return Response({
             'message': '테이블 입장에 성공했습니다.',
