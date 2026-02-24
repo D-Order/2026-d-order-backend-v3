@@ -217,7 +217,11 @@ class TableManagementViewSetTestCase(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual('6개의 테이블이 병합되었습니다.', response.data.get('message', ''))
+        self.assertEqual('테이블이 병합되었습니다.', response.data.get('message', ''))
+
+        # 응답 data 검증
+        data = response.data.get('data', {})
+        self.assertEqual(data.get('merge_table_cnt'), 6)
 
         # TableGroup 생성 확인 / 기존 그룹 삭제임
         self.assertEqual(TableGroup.objects.count(), 1)
@@ -225,10 +229,11 @@ class TableManagementViewSetTestCase(APITestCase):
 
         # 대표 테이블 번호 확인 낮은 번호여야함 / 지금 검증에선 1
         self.assertEqual(group.representative_table.table_num, 1)
+        self.assertEqual(data.get('representive'), group.representative_table.id)
 
         # 테이블 병합 테스트 같은 Group id를 가져야함
         merged_tables = Table.objects.filter(booth=self.booth, table_num__in=[1, 2, 3, 4, 5, 6])
-        
+
         for table in merged_tables:
             self.assertEqual(table.group, group)
         
