@@ -8,10 +8,25 @@ from .serializers import TableListSerializer
 from .services import TableService
 
 class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
-    
+
     serializer_class = TableListSerializer
     permission_classes = [IsAuthenticated]
 
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'message': '테이블 목록을 조회했습니다.',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
+    
+    def retrieve(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'message': '테이블 디테일을 조회했습니다.',
+            'data': serializer.data
+        }, status=status.HTTP_200_OK)
 
     def get_queryset(self):
         """현재 로그인한 사용자의 부스 테이블만 조회"""

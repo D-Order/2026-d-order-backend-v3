@@ -135,14 +135,22 @@ REDIS_HOST = env('REDIS_HOST')
 REDIS_PORT = env('REDIS_PORT')
 REDIS_PASSWORD = env('REDIS_PASSWORD')
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"],
+import sys
+if 'test' in sys.argv:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"],
+            },
         },
-    },
-}
+    }
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
