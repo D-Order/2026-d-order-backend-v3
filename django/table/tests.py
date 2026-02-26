@@ -57,15 +57,15 @@ class TableListTestCase(APITestCase):
         response = self.client.get(TABLE_LIST_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsInstance(response.data, list)
-        self.assertEqual(len(response.data), VALID_SIGNUP_DATA['booth_data']['table_max_cnt'])
+        self.assertIsInstance(response.data['data'], list)
+        self.assertEqual(len(response.data['data']), VALID_SIGNUP_DATA['booth_data']['table_max_cnt'])
 
     def test_get_tables_fields(self):
         """응답 필드 구조 검증"""
         self.client.force_authenticate(user=self.user)
         response = self.client.get(TABLE_LIST_URL)
 
-        for table_data in response.data:
+        for table_data in response.data['data']:
             self.assertIn('booth', table_data)
             self.assertIn('table_num', table_data)
             self.assertIn('status', table_data)
@@ -80,7 +80,7 @@ class TableListTestCase(APITestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(TABLE_LIST_URL)
 
-        for table_data in response.data:
+        for table_data in response.data['data']:
             self.assertEqual(table_data['status'], 'AVAILABLE')
             self.assertIsNone(table_data['group'])
             self.assertIsNone(table_data['started_at'])
@@ -90,7 +90,7 @@ class TableListTestCase(APITestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.get(TABLE_LIST_URL)
 
-        table_nums = [t['table_num'] for t in response.data]
+        table_nums = [t['table_num'] for t in response.data['data']]
         self.assertEqual(table_nums, sorted(table_nums))
 
     def test_get_tables_unauthorized(self):
