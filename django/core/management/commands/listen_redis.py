@@ -43,7 +43,7 @@ class Command(BaseCommand):
                 data = json.loads(message["data"])
 
                 # 채널명 파싱: booth:1:order:new → booth_id=1, domain=order, action=new
-                match = re.match(r"booth:(\d+):(\w+):(\w+)", channel)
+                match = re.match(r"spring:booth:(\d+):(\w+):(\w+)", channel)
                 if not match:
                     self.stderr.write(
                         self.style.ERROR(f"잘못된 채널 형식: {channel}")
