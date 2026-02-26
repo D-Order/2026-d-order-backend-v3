@@ -3,7 +3,7 @@ name: ISSUE_TEMPLATE
 about: 원활한 소통을 위한 이슈 템플릿입니다.
 title: '[Tag] Issue Message'
 labels: ''
-assignees: pyeree
+assignees: 
 
 ---
 <!-- ✨ [Feat] / 🐛 [Fix] / 📝 [Docs] / ♻️ [Refactor] / 🔧 [Chore] -->
