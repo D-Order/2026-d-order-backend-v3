@@ -11,7 +11,7 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = TableListSerializer
     permission_classes = [IsAuthenticated]
-
+    lookup_field = 'table_num'
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
@@ -21,8 +21,8 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         }, status=status.HTTP_200_OK)
     
     def retrieve(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
+        instance = self.get_queryset().filter(table_num=kwargs.get('table_num')).first()
+        serializer = self.get_serializer(instance)
         return Response({
             'message': '테이블 디테일을 조회했습니다.',
             'data': serializer.data
