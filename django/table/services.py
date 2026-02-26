@@ -1,4 +1,3 @@
-
 import logging
 
 from .models import Table, TableGroup, TableUsage
@@ -8,9 +7,23 @@ from rest_framework.exceptions import ValidationError, NotFound
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
+logger = logging.getLogger(__name__)
 
 
 class TableService:
+
+    @staticmethod
+    def _broadcast(booth_pk, event):
+        """트랜잭션 커밋 후 WebSocket 그룹에 이벤트를 전송"""
+        def send_ws():
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                logger.error('[TableService] channel_layer 없어요')
+                return
+            async_to_sync(channel_layer.group_send)(f'booth_{booth_pk}.tables', event)
+
+        # 이게 있어야 교착 상태에 안 빠진져요
+        transaction.on_commit(send_ws)
 
     @staticmethod
     @transaction.atomic
@@ -47,20 +60,15 @@ class TableService:
             return table_usage
 
         # 테이블 입장 처리
-        # TODO : 웹소켓 연동해서 테이블 상태 실시간 업데이트
         table_usage = TableService.create_table_usage(table)
-
         table.status = Table.Status.IN_USE
         table.save()
 
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f'booth_{booth.pk}.tables',
-            {
-                'type': 'enter_table',
-                'table_num': table_num,
-            }
-        )
+        TableService._broadcast(booth.pk, {
+            'type': 'enter_table',
+            'table_num': table_num,
+            'started_at': table_usage.started_at.isoformat(),
+        })
 
         return table_usage
 
@@ -74,10 +82,7 @@ class TableService:
         Returns:
             TableUsage Entity: 생성된 테이블 사용 기록 객체
         """
-        
-        table_usage = TableUsage.objects.create(table=table, started_at=now())
-        
-        return table_usage
+        return TableUsage.objects.create(table=table, started_at=now())
 
     @staticmethod
     @transaction.atomic
@@ -95,8 +100,6 @@ class TableService:
             ValidationError: 입력값이 유효하지 않을 때
             NotFound: 테이블을 찾을 수 없을 때
         """
-        # TODO : 웹소켓 연동해서 테이블 상태 실시간 업데이트해야함
-
         # 1. 비어있는 경우
         if not table_nums:
             raise ValidationError('초기화할 테이블 번호를 입력해주세요.')
@@ -104,15 +107,20 @@ class TableService:
         # 2. 테이블 조회 (그룹 정보 미리 로드)
         tables = Table.objects.select_related('group').filter(
             booth=booth,
-            table_num__in=table_nums
+            table_num__in=table_nums,
         )
 
+        if tables.exclude(status=Table.Status.IN_USE).exists():
+            raise ValidationError('사용중인 테이블만 초기화 할 수 있습니다.')
+        
         # 3. 존재하지 않는 테이블 확인
         found_count = tables.count()
         if found_count != len(table_nums):
             found_nums = set(tables.values_list('table_num', flat=True))
             missing_nums = set(table_nums) - found_nums
             raise NotFound(f'테이블을 찾을 수 없습니다: {sorted(missing_nums)}')
+
+
 
         # 4. 병합된 그룹 해제 및 그룹 삭제
         groups_to_delete = set()
@@ -140,27 +148,31 @@ class TableService:
             table__in=tables,
             ended_at__isnull=True
         )
-        
+
         # XXX : django Lazy Loading 관련
         # 캐시 사용하기
         active_usages_cache = list(active_usages)  # 업데이트 전에 사용 기록을 캐싱
 
         updated_count = active_usages.update(ended_at=now_time)
-        
 
         # usage_minutes 계산 (bulk_update 사용)
         if updated_count > 0:
-            # 업데이트된 usage들을 다시 조회 (ended_at이 이미 설정됨)
             for usage in active_usages_cache:
                 usage.usage_minutes = int(
                     (now_time - usage.started_at).total_seconds() / 60
                 )
-    
             TableUsage.objects.bulk_update(active_usages_cache, fields=['usage_minutes'])
 
-
         # 6. 테이블 상태 일괄 초기화
+        reset_table_nums = list(tables.values_list('table_num', flat=True))
         tables.update(status=Table.Status.ACTIVE)
+
+        TableService._broadcast(booth.pk, {
+            'type': 'reset_table',
+            'table_nums': reset_table_nums,
+            'count': found_count,
+        })
+
         return found_count
 
 
@@ -203,6 +215,9 @@ class TableService:
             missing_nums = set(table_nums) - found_nums
             raise NotFound(f'테이블을 찾을 수 없습니다: {sorted(missing_nums)}')
 
+        if requested_tables.filter(status=Table.Status.INACTIVE):
+            raise ValidationError("비활성화 된 테이블은 병합할 수 없어요.")
+
         # 4. 관련된 모든 그룹 수집
         groups_to_merge = set()
         for table in requested_tables:
@@ -217,30 +232,35 @@ class TableService:
             ).filter(
                 Q(group_id__in=groups_to_merge) | Q(table_num__in=table_nums)
             )
-            
         else:
             # 모두 개별 테이블
             all_tables = requested_tables
 
         # 6. 가장 낮은 번호의 테이블을 대표로 선택
         representative_table = all_tables.order_by('table_num').first()
-        
-        
+
         # 9. 새 그룹 생성
         table_group = TableGroup.objects.create(representative_table=representative_table)
-        
+
         # XXX : django Lazy Loading 관련
         # 아래 로직이 실행되면 기존 그룹이 다 해제됨
         # DJango의 Lazy Loading으로 return시에 합치기 전 그룹 정보로 접근하면 갯수가 안 맞게됨
         # 미리 그룹 갯수 받아서 return하는거로 해결~ / 해결이라고 해도 될지 모르겠음
         # TODO : 여기 최적화하기 (병합 로직이 복잡함.)
-        all_tables_count = all_tables.count() 
+        all_tables_count = all_tables.count()
+        merged_table_nums = list(all_tables.values_list('table_num', flat=True))
 
         all_tables.update(group=table_group)
-        
-        
+
         # 8. 기존 그룹 삭제
         if groups_to_merge:
             TableGroup.objects.filter(pk__in=groups_to_merge).delete()
-        
+
+        TableService._broadcast(booth.pk, {
+            'type': 'merge_table',
+            'table_nums': merged_table_nums,
+            'representative_table': representative_table.table_num,
+            'count': all_tables_count,
+        })
+
         return representative_table.table_num, all_tables_count
