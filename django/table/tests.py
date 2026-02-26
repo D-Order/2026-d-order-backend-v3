@@ -70,7 +70,7 @@ class TableListTestCase(APITestCase):
             self.assertIn('table_num', table_data)
             self.assertIn('status', table_data)
             self.assertIn('group', table_data)
-            self.assertIn('total_revenue', table_data)
+            self.assertIn('accumulated_amount', table_data)
             self.assertIn('recent_3_orders', table_data)
             self.assertIn('started_at', table_data)
             self.assertEqual(table_data['booth'], self.booth.pk)
@@ -419,7 +419,8 @@ class TableConsumerConnectTest(TransactionTestCase):
 
         response = await communicator.receive_json_from()
         self.assertEqual(response['type'], 'connection_established')
-        self.assertEqual(response['booth_id'], self.booth.pk)
+        self.assertEqual(response['data']['booth_id'], self.booth.pk)
+        self.assertIn('timestamp', response)
 
         await communicator.disconnect()
 
@@ -466,13 +467,16 @@ class TableConsumerEventTest(TransactionTestCase):
             f'booth_{self.booth.pk}.tables',
             {
                 'type': 'enter_table',
-                'table_num': 3,
-                'started_at': '2026-02-24T10:00:00',
+                'data': {
+                    'table_num': 3,
+                    'started_at': '2026-02-24T10:00:00',
+                }
             }
         )
 
         response = await communicator.receive_json_from(timeout=3)
         self.assertEqual(response['type'], 'enter_table')
+        self.assertIn('timestamp', response)
         self.assertEqual(response['data']['table_num'], 3)
         self.assertEqual(response['data']['started_at'], '2026-02-24T10:00:00')
 
@@ -487,13 +491,16 @@ class TableConsumerEventTest(TransactionTestCase):
             f'booth_{self.booth.pk}.tables',
             {
                 'type': 'reset_table',
-                'table_nums': [1, 2, 3],
-                'count': 3,
+                'data': {
+                    'table_nums': [1, 2, 3],
+                    'count': 3,
+                }
             }
         )
 
         response = await communicator.receive_json_from(timeout=3)
         self.assertEqual(response['type'], 'reset_table')
+        self.assertIn('timestamp', response)
         self.assertEqual(response['data']['table_nums'], [1, 2, 3])
         self.assertEqual(response['data']['count'], 3)
 
@@ -508,14 +515,17 @@ class TableConsumerEventTest(TransactionTestCase):
             f'booth_{self.booth.pk}.tables',
             {
                 'type': 'merge_table',
-                'table_nums': [1, 2, 3],
-                'representative_table': 1,
-                'count': 3,
+                'data': {
+                    'table_nums': [1, 2, 3],
+                    'representative_table': 1,
+                    'count': 3,
+                }
             }
         )
 
         response = await communicator.receive_json_from(timeout=3)
         self.assertEqual(response['type'], 'merge_table')
+        self.assertIn('timestamp', response)
         self.assertEqual(response['data']['representative_table'], 1)
         self.assertEqual(response['data']['count'], 3)
 
@@ -530,8 +540,10 @@ class TableConsumerEventTest(TransactionTestCase):
             'booth_99999.tables',
             {
                 'type': 'enter_table',
-                'table_num': 1,
-                'started_at': '2026-02-24T10:00:00',
+                'data': {
+                    'table_num': 1,
+                    'started_at': '2026-02-24T10:00:00',
+                }
             }
         )
 

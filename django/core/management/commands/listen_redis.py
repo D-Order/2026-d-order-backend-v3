@@ -16,19 +16,20 @@ class Command(BaseCommand):
 
         channel_layer = get_channel_layer()
 
-        # 패턴 구독: 모든 부스의 이벤트
-        pubsub = psubscribe([            
-            "booth:*:staffcall:*",   # 아직은 호출 이벤트만 처리
-            # "booth:*:table:*",       # 모든 부스의 테이블 이벤트
-            # "booth:*:order:*",       # 모든 부스의 주문 이벤트
+        # 패턴 구독: Spring에서 오는 메시지만 수신 (spring: 접두사)
+        # Django가 발행한 메시지(django: 접두사)는 구독하지 않음
+        pubsub = psubscribe([
+            "spring:booth:*:staffcall:*",   # Spring → Django 호출 이벤트
+            "spring:booth:*:tables:*",       # Spring → Django 테이블 이벤트
+            # "spring:booth:*:order:*",       # Spring → Django 주문 이벤트
         ])
 
         self.stdout.write(
             self.style.SUCCESS("구독 채널 패턴:")
         )
-        # self.stdout.write("  - booth:*:order:*")
-        self.stdout.write("  - booth:*:staffcall:*")
-        # self.stdout.write("  - booth:*:table:*")
+        # self.stdout.write("  - spring:booth:*:order:*")
+        self.stdout.write("  - spring:booth:*:staffcall:*")
+        self.stdout.write("  - spring:booth:*:tables:*")
         self.stdout.write("")
 
         for message in pubsub.listen():
@@ -37,8 +38,8 @@ class Command(BaseCommand):
                 continue
 
             try:
-                pattern = message["pattern"]   # "booth:*:order:*"
-                channel = message["channel"]   # "booth:1:order:new"
+                pattern = message["pattern"]   # "spring:booth:*:order:*"
+                channel = message["channel"]   # "spring:booth:1:order:new"
                 data = json.loads(message["data"])
 
                 # 채널명 파싱: booth:1:order:new → booth_id=1, domain=order, action=new

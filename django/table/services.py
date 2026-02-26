@@ -6,6 +6,7 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError, NotFound
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from core.redis_client import publish
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,25 @@ class TableService:
                 return
             async_to_sync(channel_layer.group_send)(f'booth_{booth_pk}.tables', event)
 
-        # 이게 있어야 교착 상태에 안 빠진져요
+        # 이게 있어야 교착 상태에 안 빠져요
         transaction.on_commit(send_ws)
+
+    @staticmethod
+    def notify_spring_reset(booth_id, table_nums):
+        """테이블 초기화 → Spring에 알림"""
+        publish(f"booth:{booth_id}:tables:reset", {
+            "table_nums": table_nums,
+            "count": len(table_nums)
+        })
+
+    # @staticmethod
+    # def notify_spring_merge(booth_id, representative_table, table_nums):
+    #     """테이블 병합 → Spring에 알림"""
+    #     publish(f"booth:{booth_id}:tables:merge", {
+    #         "representative_table": representative_table,
+    #         "table_nums": table_nums,
+    #         "count": len(table_nums)
+    #     })
 
     @staticmethod
     @transaction.atomic
@@ -66,8 +84,10 @@ class TableService:
 
         TableService._broadcast(booth.pk, {
             'type': 'enter_table',
-            'table_num': table_num,
-            'started_at': table_usage.started_at.isoformat(),
+            'data': {
+                'table_num': table_num,
+                'started_at': table_usage.started_at.isoformat(),
+            }
         })
 
         return table_usage
@@ -169,10 +189,12 @@ class TableService:
 
         TableService._broadcast(booth.pk, {
             'type': 'reset_table',
-            'table_nums': reset_table_nums,
-            'count': found_count,
+            'data': {
+                'table_nums': reset_table_nums,
+                'count': found_count,
+            }
         })
-
+        TableService.notify_spring_reset(booth.pk, reset_table_nums)
         return found_count
 
 
@@ -245,7 +267,7 @@ class TableService:
         # XXX : django Lazy Loading 관련
         # 아래 로직이 실행되면 기존 그룹이 다 해제됨
         # DJango의 Lazy Loading으로 return시에 합치기 전 그룹 정보로 접근하면 갯수가 안 맞게됨
-        # 미리 그룹 갯수 받아서 return하는거로 해결~ / 해결이라고 해도 될지 모르겠음
+        # 미리 그룹 갯수 받아서 return하는거로 해결~ 
         # TODO : 여기 최적화하기 (병합 로직이 복잡함.)
         all_tables_count = all_tables.count()
         merged_table_nums = list(all_tables.values_list('table_num', flat=True))
@@ -258,9 +280,10 @@ class TableService:
 
         TableService._broadcast(booth.pk, {
             'type': 'merge_table',
-            'table_nums': merged_table_nums,
-            'representative_table': representative_table.table_num,
-            'count': all_tables_count,
+            'data': {
+                'table_nums': merged_table_nums,
+                'representative_table': representative_table.table_num,
+                'count': all_tables_count,
+            }
         })
-
         return representative_table.table_num, all_tables_count
