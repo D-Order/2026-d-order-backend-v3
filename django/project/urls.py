@@ -28,7 +28,9 @@ urlpatterns = [
     path('api/v3/django/booth/', include('booth.urls')),
     path('api/v3/django/booth/', include('table.urls')),
     path('api/v3/django/booth/', include('menu.urls')),
-    path('health/django/', health_check),
+    path('api/v3/django/cart/', include('cart.urls')),
+    path('api/v3/django/coupon/', include('coupon.urls')),
+    path('health/', health_check),
 ]
 
 if settings.DEBUG:

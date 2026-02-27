@@ -48,7 +48,8 @@ class TableUsage(models.Model):
     started_at = models.DateTimeField()
     ended_at = models.DateTimeField(null=True, blank=True)
     usage_minutes = models.IntegerField(null=True, blank=True)
-        
+    accumulated_amount = models.IntegerField(null=False,default=0) # 테이블 세션 누적 총액
+
     def __str__(self):
-        return f"테이블 {self.table.table_num} 사용 기록: {self.started_at} - {self.ended_at} / 사용 시간(분): {self.usage_minutes}"
+        return f"테이블 {self.table.table_num} 사용 기록: {self.started_at} - {self.ended_at} / 사용 시간(분): {self.usage_minutes} / 주문 총액 : {self.accumulated_amount}"
     

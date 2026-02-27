@@ -10,6 +10,11 @@
         <module name="spring.main" />
       </profile>
     </annotationProcessing>
+    <bytecodeTargetLevel>
+      <module name="spring" target="17" />
+      <module name="spring.main" target="17" />
+      <module name="spring.test" target="17" />
+    </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
