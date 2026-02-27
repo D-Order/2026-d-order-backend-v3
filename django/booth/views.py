@@ -1,6 +1,3 @@
-from django.shortcuts import render
-
-
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from rest_framework import status
@@ -78,4 +75,4 @@ class BoothNameAPIView(APIView):
             "data" : {
                 "booth_name" : booth.name,
             }
-        }, status.HTTP_200_OK)
+        }, status=status.HTTP_200_OK)

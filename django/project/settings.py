@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'core',
     'booth',
     'table',
+    'menu',
 
     # S3
     'storages',
@@ -195,6 +196,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
+    'EXCEPTION_HANDLER': 'utils.exceptions.custom_exception_handler',
 }
 
 # Default primary key field type
@@ -264,6 +266,12 @@ LOGGING = {
         },
     },
 }
+
+# Silk 프로파일링 설정 (로컬 전용)
+if IS_LOCAL:
+    INSTALLED_APPS += ['silk']
+    MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
+    SILKY_PYTHON_PROFILER = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
@@ -389,3 +397,4 @@ SECURE_CONTENT_SECURITY_POLICY = {
 
 # Clickjacking 보호
 X_FRAME_OPTIONS = 'DENY'
+

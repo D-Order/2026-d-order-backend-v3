@@ -21,13 +21,13 @@ class Table(models.Model):
     id = models.AutoField(primary_key=True)
     booth = models.ForeignKey('booth.Booth', on_delete=models.CASCADE, related_name='tables')
     table_num = models.IntegerField()
-    
-    class status(models.TextChoices):
+
+    class Status(models.TextChoices):
         ACTIVE = 'AVAILABLE', '활성화' # 사용자가 입장 할 수 있는 상태
         IN_USE = 'IN_USE', '사용중' # 사용자가 사용중인 상태
-        INACTIVE = 'INACTIVE', '비활성화' 
+        INACTIVE = 'INACTIVE', '비활성화'
 
-    status = models.CharField(max_length=20, choices=status.choices, default=status.ACTIVE)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
 
     group = models.ForeignKey(
         TableGroup,  # ← 직접 참조 (위에 정의됨)
@@ -50,5 +50,5 @@ class TableUsage(models.Model):
     usage_minutes = models.IntegerField(null=True, blank=True)
         
     def __str__(self):
-        return f"테이블 {self.table.table_num} 사용 기록: {self.started_time} - {self.ended_time} / 사용 시간(분): {self.usage_minutes}"
+        return f"테이블 {self.table.table_num} 사용 기록: {self.started_at} - {self.ended_at} / 사용 시간(분): {self.usage_minutes}"
     

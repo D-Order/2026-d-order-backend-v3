@@ -56,6 +56,9 @@ services:
       # Spring 유저 생성용 환경변수 (init-db.sh에서 사용)
       SPRING_DB_USER: ${SPRING_DB_USER:-spring_user}
       SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:-spring_password}
+      # 타임존 설정
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
     ports:
       - "5432:5432"
     volumes:

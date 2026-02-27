@@ -41,7 +41,7 @@ class BoothMyPageAPIViewTestCase(APITestCase):
         self.client.force_authenticate(user=self.user)
 
         # GET 요청
-        response = self.client.get('/api/v3/booth/mypage/')
+        response = self.client.get('/api/v3/django/booth/mypage/')
 
         # 응답 검증
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -73,7 +73,7 @@ class BoothMyPageAPIViewTestCase(APITestCase):
     def test_get_booth_data_unauthorized(self):
         """인증 없이 부스 데이터 조회 시 실패"""
         # 인증 없이 요청
-        response = self.client.get('/api/v3/booth/mypage/')
+        response = self.client.get('/api/v3/django/booth/mypage/')
 
         # 401 Unauthorized 응답
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -94,7 +94,7 @@ class BoothMyPageAPIViewTestCase(APITestCase):
         }
 
         response = self.client.patch(
-            '/api/v3/booth/mypage/',
+            '/api/v3/django/booth/mypage/',
             data=patch_data,
             format='json'
         )
@@ -139,7 +139,7 @@ class BoothMyPageAPIViewTestCase(APITestCase):
         }
 
         response = self.client.patch(
-            '/api/v3/booth/mypage/',
+            '/api/v3/django/booth/mypage/',
             data=patch_data,
             format='json'
         )
@@ -173,7 +173,7 @@ class BoothAuthenticationIntegrationTestCase(APITestCase):
         }
 
         signup_response = self.client.post(
-            '/api/v3/auth/signup/',
+            '/api/v3/django/auth/signup/',
             data=signup_data,
             format='json'
         )
@@ -185,7 +185,7 @@ class BoothAuthenticationIntegrationTestCase(APITestCase):
         self.client.force_authenticate(user=user)
 
         # 3. 부스 데이터 조회
-        response = self.client.get('/api/v3/booth/mypage/')
+        response = self.client.get('/api/v3/django/booth/mypage/')
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 

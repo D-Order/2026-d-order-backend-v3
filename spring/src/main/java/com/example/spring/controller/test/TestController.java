@@ -7,12 +7,16 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
+import com.example.spring.config.JwtUtil;
+import com.example.spring.config.CookieUtil;
 
 @RequiredArgsConstructor // Lombok 어노테이션
 @RestController
 public class TestController {
     private final TestService testService;
-
+    private final JwtUtil jwtUtil;
+    private final CookieUtil cookieUtil;
 
     @GetMapping("/")
     public String home() {
@@ -30,4 +34,19 @@ public class TestController {
     public TestResponse getTestData(@PathVariable Long id) {
         return testService.getTestData(id);
     }
+
+    // JWT 디코드 테스트 API
+    @GetMapping("/spring-test/decode")
+public ResponseEntity<?> decodeJwt(jakarta.servlet.http.HttpServletRequest request) {
+    String accessToken = cookieUtil.getAccessTokenFromCookies(request.getCookies());
+    if (accessToken == null) {
+        return ResponseEntity.status(401).body("access_token 쿠키 없음");
+    }
+    try {
+        Long userId = jwtUtil.getUserIdFromToken(accessToken);
+        return ResponseEntity.ok(java.util.Map.of("user_id", userId));
+    } catch (Exception e) {
+        return ResponseEntity.status(400).body("JWT 디코드 실패: " + e.getMessage());
+    }
+}
 }

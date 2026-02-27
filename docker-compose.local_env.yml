@@ -7,6 +7,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_INITDB_ARGS: -U postgres
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
     ports:
       - "5432:5432"
     volumes:
