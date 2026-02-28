@@ -16,7 +16,7 @@ public class TestController {
     private final JwtUtil jwtUtil;
     private final CookieUtil cookieUtil;
 
-    @GetMapping("/")
+    @GetMapping("/check")
     public String home() {
         return "디오더 스부 서버가 정상적으로 실행중입니다.";
     }

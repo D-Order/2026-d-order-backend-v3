@@ -23,7 +23,8 @@ import java.util.Map;
  * POST /api/v3/spring/auth/refresh - 토큰 재발급
  */
 @RestController
-@RequestMapping("/api/v3/spring/auth")
+// 앞에 "/api/v3/spring"은 nginx에서 프록시로 매핑되어 있으므로, 여기서는 "/auth"만 사용
+@RequestMapping("/auth")
 @RequiredArgsConstructor
 @Slf4j
 public class AuthController {
