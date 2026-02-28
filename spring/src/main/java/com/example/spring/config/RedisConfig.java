@@ -18,10 +18,28 @@ public class RedisConfig {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
 
-        // 예시 채널명: 실제 운영 채널명에 맞게 수정 필요
-        container.addMessageListener(redisSubscriber, new ChannelTopic("booth:1:order:new"));
-        container.addMessageListener(redisSubscriber, new ChannelTopic("booth:1:staffcall:newcall"));
-        container.addMessageListener(redisSubscriber, new ChannelTopic("test:1:testname:moving"));
+        // [Spring → Django] 발행용 채널명 리스트 (spring: 접두사 자동 추가)
+        String[] springPublishChannels = {
+            "booth:*:order:*",
+            "booth:*:staffcall:*"
+            
+        };
+
+        // [Django → Spring] 구독용 채널명 리스트 (django: 접두사 자동 추가)
+        String[] djangoSubscribeChannels = {
+            "booth:*:order:*",
+            "booth:*:staffcall:*"
+        };
+
+        // spring: 채널은 발행용이지만, 필요시 구독도 가능
+        for (String channel : springPublishChannels) {
+            container.addMessageListener(redisSubscriber, new ChannelTopic("spring:" + channel));
+        }
+
+        // django: 채널은 장고에서 발행한 메시지 구독 (접두사 자동 추가)
+        for (String channel : djangoSubscribeChannels) {
+            container.addMessageListener(redisSubscriber, new ChannelTopic("django:" + channel));
+        }
 
         return container;
     }
