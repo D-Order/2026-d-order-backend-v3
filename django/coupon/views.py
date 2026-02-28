@@ -21,17 +21,20 @@ def error_response(e: CouponError):
         status=e.status_code,
     )
 
+
 def get_admin_booth(request) -> Booth:
-    """
-    운영자(스태프) 기준으로 본인의 Booth를 가져온다.
-    - 프로젝트에서 user-booth 매핑 방식에 맞춰 여기만 수정하면 됨.
-    """
     if not request.user.is_staff:
         raise CouponError("권한이 없습니다.", error_code="FORBIDDEN", detail="admin only", status_code=403)
 
-    if hasattr(request.user, "booth") and request.user.booth_id:
+    try:
         return request.user.booth
-    raise CouponError("운영자 부스 정보를 찾을 수 없습니다.", error_code="BOOTH_NOT_FOUND", detail="no booth mapped", status_code=404)
+    except Booth.DoesNotExist:
+        raise CouponError(
+            "운영자 부스 정보를 찾을 수 없습니다.",
+            error_code="BOOTH_NOT_FOUND",
+            detail="user has no booth mapped",
+            status_code=404,
+        )
 
 
 # 운영자용: 쿠폰 목록/등록
@@ -72,9 +75,11 @@ class CouponListCreateAPIView(APIView):
 
         serializer = CouponCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        payload = dict(serializer.validated_data)
+        payload.pop("booth_id", None)
 
         try:
-            coupon = create_coupon_and_codes(booth=booth, **serializer.validated_data)
+            coupon = create_coupon_and_codes(booth=booth, **payload)
         except CouponError as e:
             return error_response(e)
         except Exception as e:
@@ -113,6 +118,7 @@ class CouponDeleteAPIView(APIView):
         except CouponError as e:
             return error_response(e)
         coupon = get_object_or_404(Coupon, id=coupon_id, booth=booth)
+
         try:
             delete_coupon_if_unused(coupon_id=coupon.id)
         except CouponError as e:
@@ -130,13 +136,13 @@ class CouponDownloadAPIView(APIView):
             booth = get_admin_booth(request)
         except CouponError as e:
             return error_response(e)
-
         coupon = get_object_or_404(Coupon, id=coupon_id, booth=booth)
         codes = CouponCode.objects.filter(coupon=coupon).order_by("created_at")
 
         from openpyxl import Workbook
         from openpyxl.utils import get_column_letter
         from io import BytesIO
+        from django.utils import timezone
 
         wb = Workbook()
         ws = wb.active
