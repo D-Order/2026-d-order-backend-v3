@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.db.models import Q
 
 from table.models import *
 from menu.models import *
@@ -40,8 +41,29 @@ class CartItem(models.Model):
     menu = models.ForeignKey(Menu, on_delete=models.CASCADE, null=True, blank=True)
     setmenu = models.ForeignKey(SetMenu, on_delete=models.CASCADE, null=True, blank=True)
     quantity = models.IntegerField()
-    price_at_cart = models.IntegerField()  # 담을 당시 단가
+    price_at_cart = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                name="cartitem_menu_xor_setmenu",
+                condition=(
+                    (Q(menu__isnull=False) & Q(setmenu__isnull=True)) |
+                    (Q(menu__isnull=True) & Q(setmenu__isnull=False))
+                ),
+            ),
+            models.UniqueConstraint(
+                fields=["cart", "menu"],
+                condition=Q(menu__isnull=False),
+                name="uniq_cart_menu_item",
+            ),
+            models.UniqueConstraint(
+                fields=["cart", "setmenu"],
+                condition=Q(setmenu__isnull=False),
+                name="uniq_cart_setmenu_item",
+            ),
+        ]
 
     @property
     def type(self) -> str:
@@ -54,6 +76,3 @@ class CartItem(models.Model):
     @property
     def line_price(self) -> int:
         return self.price_at_cart * self.quantity
-
-    def __str__(self):
-        return f"CartItem(cart={self.cart_id}, type={self.type}, qty={self.quantity})"
