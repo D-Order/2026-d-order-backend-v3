@@ -17,7 +17,6 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-
 from django.conf.urls.static import static
 
 from .views import health_check
@@ -30,6 +29,7 @@ urlpatterns = [
     path('api/v3/django/booth/', include('menu.urls')),
     path('api/v3/django/cart/', include('cart.urls')),
     path('api/v3/django/coupon/', include('coupon.urls')),
+    path('api/v3/django/order/', include('order.urls')),
     path('health/', health_check),
 ]
 
