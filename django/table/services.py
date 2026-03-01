@@ -11,6 +11,141 @@ from core.redis_client import publish
 logger = logging.getLogger(__name__)
 
 
+class OrderBroadcastService:
+    """주문 변경 시 테이블 WebSocket 그룹으로 브로드캐스트
+
+    - booth_{booth_id}.tables      → 목록 뷰 (최근 3개 주문 요약)
+    - booth_{booth_id}.tables.{n}  → 상세 뷰 (전체 주문 목록)
+    """
+
+    @staticmethod
+    def _build_order_items(order):
+        """주문의 부모 레벨 아이템 목록 구성"""
+        from order.models import OrderItem
+
+        parent_items = (
+            OrderItem.objects
+            .filter(order=order, parent__isnull=True)
+            .select_related("menu", "setmenu")
+            .order_by("id")
+        )
+        items = []
+        for item in parent_items:
+            if item.setmenu_id:
+                name = item.setmenu.name
+                menu_id = item.setmenu_id
+                from_set = True
+            else:
+                name = item.menu.name if item.menu else "알 수 없음"
+                menu_id = item.menu_id
+                from_set = False
+
+            items.append({
+                "id": item.pk,
+                "menu_id": menu_id,
+                "name": name,
+                "quantity": item.quantity,
+                "fixed_price": item.fixed_price,
+                "item_total_price": item.fixed_price * item.quantity,
+                "status": item.status,
+                "from_set": from_set,
+            })
+        return items
+
+    @staticmethod
+    def _build_order_summary(order):
+        """단일 주문 요약 데이터"""
+        from django.utils import timezone as tz
+
+        return {
+            "order_id": order.pk,
+            "order_status": order.order_status,
+            "created_at": tz.localtime(order.created_at).isoformat(),
+            "order_fixed_price": order.order_price,
+            "order_items": OrderBroadcastService._build_order_items(order),
+        }
+
+    @staticmethod
+    def broadcast_order_update(booth_id, table_num, table_usage_id):
+        """주문 변경사항을 테이블 목록 / 상세 WebSocket 그룹에 전송
+
+        transaction.on_commit() 으로 감싸서 DB 커밋 후에만 전송.
+        """
+
+        def _send():
+            from order.models import Order
+
+            channel_layer = get_channel_layer()
+            if not channel_layer:
+                logger.error("[OrderBroadcast] channel_layer 없음")
+                return
+
+            try:
+                table_usage = TableUsage.objects.get(pk=table_usage_id)
+                accumulated_amount = table_usage.accumulated_amount
+
+                # 전체 주문 (CANCELLED 제외)
+                orders = (
+                    Order.objects
+                    .filter(table_usage_id=table_usage_id)
+                    .exclude(order_status="CANCELLED")
+                    .order_by("created_at")
+                )
+
+                original_price = sum(
+                    o.original_price or o.order_price for o in orders
+                )
+
+                # detail 용: 전체 주문 목록
+                all_orders = [
+                    OrderBroadcastService._build_order_summary(o)
+                    for o in orders
+                ]
+
+                # list 용: 최근 3개 (최신순)
+                recent_3 = list(orders.order_by("-created_at")[:3])
+                recent_3_orders = [
+                    OrderBroadcastService._build_order_summary(o)
+                    for o in recent_3
+                ]
+
+                # ① 목록 그룹
+                async_to_sync(channel_layer.group_send)(
+                    f"booth_{booth_id}.tables",
+                    {
+                        "type": "order_update",
+                        "data": {
+                            "table_num": table_num,
+                            "recent_3_orders": recent_3_orders,
+                            "accumulated_amount": accumulated_amount,
+                        },
+                    },
+                )
+
+                # ② 상세 그룹
+                async_to_sync(channel_layer.group_send)(
+                    f"booth_{booth_id}.tables.{table_num}",
+                    {
+                        "type": "order_update",
+                        "data": {
+                            "table_num": table_num,
+                            "orders": all_orders,
+                            "original_price": original_price,
+                            "accumulated_amount": accumulated_amount,
+                        },
+                    },
+                )
+
+                logger.info(
+                    f"[OrderBroadcast] booth={booth_id} table={table_num} "
+                    f"주문 {len(all_orders)}건 브로드캐스트 완료"
+                )
+            except Exception as e:
+                logger.error(f"[OrderBroadcast] 전송 실패: {e}")
+
+        transaction.on_commit(_send)
+
+
 class TableService:
 
     @staticmethod

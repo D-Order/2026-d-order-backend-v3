@@ -71,8 +71,8 @@ class MenuSerializer(serializers.ModelSerializer):
         read_only_fields = ['menu_id', 'booth_id', 'is_soldout', 'created_at', 'updated_at']
     
     def get_is_soldout(self, obj):
-        """stock이 0이면 품절"""
-        return obj.stock == 0
+        """stock이 0 이하이면 품절"""
+        return obj.stock <= 0
 
 
 class MenuUpdateSerializer(serializers.ModelSerializer):
@@ -139,8 +139,8 @@ class MenuUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ['menu_id', 'booth_id', 'image', 'is_soldout', 'created_at', 'updated_at']
     
     def get_is_soldout(self, obj):
-        """stock이 0이면 품절"""
-        return obj.stock == 0
+        """stock이 0 이하이면 품절"""
+        return obj.stock <= 0
     
     def validate(self, attrs):
         """이미지 필드가 요청에 포함되어 있으면 에러"""
@@ -265,9 +265,9 @@ class SetMenuSerializer(serializers.ModelSerializer):
         return total
     
     def get_is_soldout(self, obj):
-        """구성 메뉴 중 하나라도 stock=0이면 품절"""
+        """구성 메뉴 중 하나라도 stock<=0이면 품절"""
         for item in obj.items.all():
-            if item.menu.stock == 0:
+            if item.menu.stock <= 0:
                 return True
         return False
     
@@ -367,9 +367,9 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
         return total
     
     def get_is_soldout(self, obj):
-        """구성 메뉴 중 하나라도 stock=0이면 품절"""
+        """구성 메뉴 중 하나라도 stock<=0이면 품절"""
         for item in obj.items.all():
-            if item.menu.stock == 0:
+            if item.menu.stock <= 0:
                 return True
         return False
     
