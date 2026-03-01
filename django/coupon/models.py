@@ -1,6 +1,8 @@
 from django.db import models
+from django.utils import timezone
 from booth.models import *
 from table.models import *
+from cart.models import *
 
 
 class Coupon(models.Model):
@@ -21,7 +23,6 @@ class Coupon(models.Model):
     def __str__(self):
         return f"[{self.booth.name}] {self.name}"
 
-
 class TableCoupon(models.Model):
     coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE, related_name="table_coupons")
     table_usage = models.OneToOneField(
@@ -34,3 +35,31 @@ class TableCoupon(models.Model):
 
     def __str__(self):
         return f"TableUsage {self.table_usage_id} - Coupon {self.coupon_id}"
+    
+class CouponCode(models.Model):
+    coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE, related_name="codes")
+    code = models.CharField(max_length=16, unique=True, db_index=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def mark_used(self):
+        self.used_at = timezone.now()
+        self.save(update_fields=["used_at"])
+
+    def __str__(self):
+        return self.code
+
+# 추가: round 단위로 "이 카트에 어떤 쿠폰 코드가 적용됐는지" 저장하는 테이블
+class CartCouponApply(models.Model):
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="applied_coupons")
+    round = models.IntegerField()
+    coupon_code = models.OneToOneField(CouponCode, on_delete=models.CASCADE, related_name="applied_record")
+    applied_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["cart", "round"], name="uniq_cart_round_coupon_apply")
+        ]
+
+    def __str__(self):
+        return f"Cart {self.cart_id} round {self.round} -> {self.coupon_code.code}"

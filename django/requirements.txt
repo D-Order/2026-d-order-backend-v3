@@ -52,3 +52,4 @@ ujson==5.11.0
 urllib3==2.6.3
 whitenoise==6.11.0
 zope.interface==8.2
+openpyxl==3.1.5
