@@ -19,17 +19,22 @@ from channels.security.websocket import AllowedHostsOriginValidator
 from authentication.middleware import JWTWebSocketMiddleware
 from django.conf import settings
 import table.routing
+import order.routing
 
-# 기본 WebSocket 라우팅
-websocket_app = JWTWebSocketMiddleware(
-    URLRouter(
-        table.routing.websocket_urlpatterns
+
+if 'PYTEST_CURRENT_TEST' in os.environ or os.environ.get('DJANGO_ENV') == 'test':
+    # 테스트 환경에서는 JWT 미들웨어 제거
+    websocket_app = URLRouter(
+        table.routing.websocket_urlpatterns + order.routing.websocket_urlpatterns
     )
-)
-
-# Production 환경에서만 Origin 검증 활성화
-if not settings.DEBUG:
-    websocket_app = AllowedHostsOriginValidator(websocket_app)
+else:
+    websocket_app = JWTWebSocketMiddleware(
+        URLRouter(
+            table.routing.websocket_urlpatterns + order.routing.websocket_urlpatterns
+        )
+    )
+    if not settings.DEBUG:
+        websocket_app = AllowedHostsOriginValidator(websocket_app)
 
 # ===== 5단계: ASGI Application 설정 =====
 application = ProtocolTypeRouter({

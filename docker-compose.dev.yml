@@ -5,8 +5,8 @@ services:
     environment:
       DOMAIN: ${DOMAIN:-localhost}
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - certbot_www:/var/www/certbot:ro
       - certbot_certs:/etc/letsencrypt:ro
@@ -18,12 +18,12 @@ services:
     healthcheck:
       test:
         [
-          "CMD",
-          "wget",
-          "--quiet",
-          "--tries=1",
-          "--spider",
-          "http://localhost/health/",
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost/health/',
         ]
       interval: 10s
       timeout: 5s
@@ -60,12 +60,12 @@ services:
       TZ: Asia/Seoul
       PGTZ: Asia/Seoul
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_data_dev:/var/lib/postgresql/data
       - ./db-scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -78,11 +78,11 @@ services:
     container_name: d-order-redis-dev
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redis_data_dev:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping"]
+      test: ['CMD-SHELL', 'redis-cli -a ${REDIS_PASSWORD} ping']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -96,7 +96,7 @@ services:
     command: daphne -b 0.0.0.0 -p 8000 project.asgi:application
     environment:
       ENVIRONMENT: development
-      DEBUG: "True"
+      DEBUG: 'True'
       SECRET_KEY: ${SECRET_KEY}
       ALLOWED_HOSTS_DEV: ${ALLOWED_HOSTS_DEV}
       ALLOWED_HOSTS_LOCAL: ${ALLOWED_HOSTS_LOCAL}
@@ -111,17 +111,17 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SECURE_SSL_REDIRECT: "False"
-      CSRF_COOKIE_SECURE: "False"
-      SESSION_COOKIE_SECURE: "False"
-      CSRF_COOKIE_HTTPONLY: "True"
-      SESSION_COOKIE_HTTPONLY: "True"
+      SECURE_SSL_REDIRECT: 'False'
+      CSRF_COOKIE_SECURE: 'False'
+      SESSION_COOKIE_SECURE: 'False'
+      CSRF_COOKIE_HTTPONLY: 'True'
+      SESSION_COOKIE_HTTPONLY: 'True'
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
     expose:
-      - "8000"
+      - '8000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -150,12 +150,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       SPRING_DB_USER: ${SPRING_DB_USER}
       SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
+      # Django API URL Django API 설정 (BFF 패턴)
+      DJANGO_API_URL: ${DJANGO_API_URL}
       # Redis 설정 - Django와 공유
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     expose:
-      - "8080"
+      - '8080'
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,12 +166,12 @@ services:
     healthcheck:
       test:
         [
-          "CMD",
-          "wget",
-          "--quiet",
-          "--tries=1",
-          "--spider",
-          "http://localhost:8080/health",
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:8080/health',
         ]
       interval: 30s
       timeout: 10s

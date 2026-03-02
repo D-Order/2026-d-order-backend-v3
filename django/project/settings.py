@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     'cart',
     'coupon',
     'menu',
+    'order',
 
     # S3
     'storages',
@@ -136,18 +137,22 @@ REDIS_PORT = env('REDIS_PORT')
 REDIS_PASSWORD = env('REDIS_PASSWORD')
 
 import sys
-if 'test' in sys.argv:
+if 'PYTEST_CURRENT_TEST' in os.environ:
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels.layers.InMemoryChannelLayer",
         }
     }
 else:
+    if REDIS_PASSWORD:
+        redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"
+    else:
+        redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}"
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
-                "hosts": [f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"],
+                "hosts": [redis_url],
             },
         },
     }
