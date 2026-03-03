@@ -87,7 +87,7 @@ class CartDetailAPIView(APIView):
                 status=410,
             )
 
-        cart, _ = Cart.objects.get_or_create(table_usage=table_usage)
+        cart = get_or_create_cart_by_table_usage(query_serializer.validated_data["table_usage_id"])
 
         if cart.is_pending_expired():
             cart.status = Cart.Status.ACTIVE
