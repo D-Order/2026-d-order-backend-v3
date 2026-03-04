@@ -1,11 +1,16 @@
 from rest_framework import viewsets, status, views
-from rest_framework.decorators import action # Removed since no custom actions are kept
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.response import Response # Removed since no custom actions are kept
-from .models import Table
+from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
+from .models import Table, TableUsage
 from booth.models import Booth
 from .serializers import TableListSerializer
 from .services import TableService
+
+
+class TablePagination(PageNumberPagination):
+    page_size = 15
 
 class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
 
@@ -14,18 +19,49 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_field = 'table_num'
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
+
+        active_usages = TableUsage.objects.filter(
+            table__in=queryset,
+            ended_at__isnull=True,
+        ).select_related('table')
+        usage_map = {u.table_id: u for u in active_usages}
+
+        serializer = TableListSerializer(
+            queryset,
+            many=True,
+            context={**self.get_serializer_context(), 'usage_map': usage_map},
+        )
         return Response({
             'message': '테이블 목록을 조회했습니다.',
-            'data': serializer.data
+            'data': serializer.data,
         }, status=status.HTTP_200_OK)
-    
+
     def retrieve(self, request, *args, **kwargs):
+        from order.services import OrderService
+        from order.serializers import AdminTableOrderHistoryResponseSerializer
+
         instance = self.get_queryset().filter(table_num=kwargs.get('table_num')).first()
-        serializer = self.get_serializer(instance)
+        if not instance:
+            return Response({'message': '테이블을 찾을 수 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        usage = TableUsage.objects.filter(table=instance, ended_at__isnull=True).first()
+        if not usage:
+            return Response({'message': '활성 테이블 세션이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
+
+        history = OrderService.build_order_history_data(usage)
+        all_items = []
+        for order in history['order_list']:
+            all_items.extend(order['order_items'])
+
+        response_data = {
+            'table_number': history['table_number'],
+            'table_total_price': history['table_total_price'],
+            'order_items': all_items,
+        }
+        serializer = AdminTableOrderHistoryResponseSerializer(response_data)
         return Response({
             'message': '테이블 디테일을 조회했습니다.',
-            'data': serializer.data
+            'data': serializer.data,
         }, status=status.HTTP_200_OK)
 
     def get_queryset(self):
