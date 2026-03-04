@@ -61,7 +61,7 @@ public class ServingTaskService {
         publishToDjango(boothId, "cooked", task.getOrderItem().getId(), null);
     }
 
-    // [공통 로직] 장고가 구독 중인 채널로 Redis 메시지 발행
+    // 장고가 구독 중인 채널로 Redis 메시지 발행
     private void publishToDjango(Long boothId, String status, Long orderItemId, String catchedBy) {
         try {
             ServingStatusMessageDto messageDto = ServingStatusMessageDto.builder()
@@ -74,7 +74,7 @@ public class ServingTaskService {
             // 객체를 JSON 문자열로 변환
             String jsonMessage = objectMapper.writeValueAsString(messageDto);
 
-            // 발행용 채널명 (spring: 접두사는 Nginx나 Redis 설정에서 안 붙는다면 여기서 직접 붙여야 할 수 있으나 명세서대로 "spring:" 포함)
+            // 이해는 못했으나.. 발행용 채널명 (spring: 접두사는 Nginx나 Redis 설정에서 안 붙는다면 여기서 직접 붙여야 할 수 있으나 명세서대로 "spring:" 포함)
             String channel = "spring:booth:" + boothId + ":order:" + status;
 
             redisTemplate.convertAndSend(channel, jsonMessage);

@@ -12,7 +12,8 @@ public class CookedItemResponse {
 
     private Long taskId;
     private Long orderItemId;
-    // TODO: OrderItem 내부에 조인된 정보를 통해 메뉴 이름, 테이블 번호 등을 가져와 매핑할 수 있습니다.
+
+    // OrderItem 내부에 조인된 정보를 통해 메뉴 이름, 테이블 번호 등을 가져와 매핑할 수 있습니다.
     // private String menuName;
     // private Integer quantity;
 

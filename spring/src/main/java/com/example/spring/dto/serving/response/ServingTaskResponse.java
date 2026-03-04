@@ -16,7 +16,7 @@ public class ServingTaskResponse {
     private String catchedBy;
     private LocalDateTime requestedAt;
 
-    // Entity를 받아서 DTO로 변환하는 정적 팩토리 메서드
+    // 서빙 테스크 Entity를 받아서 DTO로 변환
     public static ServingTaskResponse from(ServingTask task) {
         return ServingTaskResponse.builder()
                 .taskId(task.getId())
