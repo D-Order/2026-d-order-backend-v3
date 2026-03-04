@@ -13,10 +13,11 @@
     <content url="file://$MODULE_DIR$/../../spring/src/test">
       <sourceFolder url="file://$MODULE_DIR$/../../spring/src/test/java" isTestSource="true" />
     </content>
-    <orderEntry type="jdk" jdkName="17" jdkType="JavaSDK" />
+    <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="spring.main" />
     <orderEntry type="library" name="Gradle: org.springframework.boot:spring-boot-starter-data-jpa:3.5.4" level="project" />
+    <orderEntry type="library" name="Gradle: org.springframework.boot:spring-boot-starter-websocket:3.5.4" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework.boot:spring-boot-starter-web:3.5.4" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework.boot:spring-boot-starter-security:3.5.4" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework.boot:spring-boot-starter-data-redis:3.5.4" level="project" />
@@ -29,6 +30,8 @@
     <orderEntry type="library" name="Gradle: org.hibernate.orm:hibernate-core:6.6.22.Final" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework.data:spring-data-jpa:3.5.2" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework:spring-aspects:6.2.9" level="project" />
+    <orderEntry type="library" name="Gradle: org.springframework:spring-websocket:6.2.9" level="project" />
+    <orderEntry type="library" name="Gradle: org.springframework:spring-messaging:6.2.9" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework.boot:spring-boot-starter-json:3.5.4" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework.boot:spring-boot-starter-tomcat:3.5.4" level="project" />
     <orderEntry type="library" name="Gradle: org.springframework:spring-webmvc:6.2.9" level="project" />
