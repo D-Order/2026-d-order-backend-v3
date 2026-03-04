@@ -97,7 +97,7 @@ public class SecurityConfig {
         // 쿠키 포함 허용
         configuration.setAllowCredentials(true);
 
-        // 노출할 헤더
+        // 노출할 헤더 (에러 응답에도 노출)
         configuration.setExposedHeaders(Arrays.asList(
                 "Set-Cookie", "Authorization"
         ));
