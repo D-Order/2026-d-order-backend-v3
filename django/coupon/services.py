@@ -11,8 +11,7 @@ from table.models import *
 from cart.models import *
 from cart.services import *
 
-from .models import Coupon, CouponCode, CartCouponApply
-
+from .models import *
 
 class CouponError(Exception):
     def __init__(self, message, error_code="COUPON_ERROR", detail=None, status_code=400):
@@ -49,9 +48,20 @@ def _calc_discount(subtotal: int, discount_type: str, discount_value: Decimal) -
 
 
 @transaction.atomic
-def create_coupon_and_codes(*, booth_id: int, name: str, description: str | None,
-                            discount_type: str, discount_value: Decimal, quantity: int) -> Coupon:
-    booth = get_object_or_404(Booth, id=booth_id)
+def create_coupon_and_codes(
+    *,
+    booth: Booth,
+    name: str,
+    description: str | None,
+    discount_type: str,
+    discount_value: Decimal,
+    quantity: int,
+) -> Coupon:
+    # 변경
+    # created 변수가 없던거 수정
+
+    if quantity < 1:
+        raise CouponError("quantity는 1 이상이어야 합니다.", "VALIDATION_ERROR", status_code=400)
 
     coupon = Coupon.objects.create(
         booth=booth,
@@ -62,6 +72,7 @@ def create_coupon_and_codes(*, booth_id: int, name: str, description: str | None
         quantity=quantity,
     )
 
+    created = 0
     while created < quantity:
         code = _gen_code(6)
         try:
@@ -99,8 +110,10 @@ def delete_coupon_if_unused(*, coupon_id: int) -> None:
 def apply_coupon_code(*, table_usage_id: int, coupon_code_str: str):
     table_usage = get_object_or_404(TableUsage, id=table_usage_id)
     _ensure_table_usage_alive(table_usage)
+
     cart = get_object_or_404(Cart.objects.select_for_update(), table_usage=table_usage)
     _ensure_cart_active(cart)
+
     code = get_object_or_404(CouponCode.objects.select_for_update(), code=coupon_code_str)
 
     booth_id = table_usage.table.booth_id
@@ -114,13 +127,11 @@ def apply_coupon_code(*, table_usage_id: int, coupon_code_str: str):
         raise CouponError("이미 쿠폰이 적용되어 있습니다.", "COUPON_ALREADY_APPLIED", status_code=409)
 
     subtotal = recalc_cart_price(cart)
-
     discount_amount = _calc_discount(subtotal, code.coupon.discount_type, code.coupon.discount_value)
     total = subtotal - discount_amount
 
-    code.used_at = timezone.now()
-    code.save(update_fields=["used_at"])
-
+    # 변경 이유
+    # apply는 “예약”이고, 실제 사용(used_at)은 결제 확정(주문 생성) 시점에 찍어야 함
     CartCouponApply.objects.create(cart=cart, round=cart.round, coupon_code=code)
 
     return {
@@ -148,13 +159,17 @@ def cancel_coupon_apply(*, table_usage_id: int):
     cart = get_object_or_404(Cart.objects.select_for_update(), table_usage=table_usage)
     _ensure_cart_active(cart)
 
-    applied = CartCouponApply.objects.select_for_update().filter(cart=cart, round=cart.round).select_related("coupon_code").first()
+    applied = (
+        CartCouponApply.objects.select_for_update()
+        .filter(cart=cart, round=cart.round)
+        .select_related("coupon_code")
+        .first()
+    )
     if not applied:
         raise CouponError("적용된 쿠폰이 없습니다.", "COUPON_NOT_APPLIED", status_code=400)
-    code = applied.coupon_code
-    code.used_at = None
-    code.save(update_fields=["used_at"])
 
+    # 변경
+    # apply/cancel은 “예약” 상태만 변경. used_at은 결제 확정 단계에서만 변경해야 함
     applied.delete()
 
     subtotal = recalc_cart_price(cart)
