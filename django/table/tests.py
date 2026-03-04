@@ -13,6 +13,8 @@ from booth.models import Booth
 from table.models import Table, TableGroup, TableUsage
 from table.consumers import TableConsumer
 from table.services import TableService
+from menu.models import Menu
+from order.models import Order, OrderItem
 from core.test_utils import IN_MEMORY_STORAGES, suppress_request_warnings
 
 User = get_user_model()
@@ -66,14 +68,12 @@ class TableListTestCase(APITestCase):
         response = self.client.get(TABLE_LIST_URL)
 
         for table_data in response.data['data']:
-            self.assertIn('booth', table_data)
             self.assertIn('table_num', table_data)
             self.assertIn('status', table_data)
             self.assertIn('group', table_data)
             self.assertIn('accumulated_amount', table_data)
-            self.assertIn('recent_3_orders', table_data)
+            self.assertIn('order_list', table_data)
             self.assertIn('started_at', table_data)
-            self.assertEqual(table_data['booth'], self.booth.pk)
 
     def test_get_tables_initial_state(self):
         """초기 상태: 전부 AVAILABLE, group None, started_at None"""
@@ -93,9 +93,187 @@ class TableListTestCase(APITestCase):
         table_nums = [t['table_num'] for t in response.data['data']]
         self.assertEqual(table_nums, sorted(table_nums))
 
+    def test_get_tables_order_list_empty_when_no_orders(self):
+        """주문 없는 테이블의 order_list는 빈 리스트"""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(TABLE_LIST_URL)
+
+        for table_data in response.data['data']:
+            self.assertEqual(table_data['order_list'], [])
+
+    def test_get_tables_order_list_flat_with_name_quantity(self):
+        """order_list가 name, quantity만 가진 flat list로 반환"""
+        self.client.force_authenticate(user=self.user)
+
+        table = Table.objects.get(booth=self.booth, table_num=1)
+        table.status = Table.Status.IN_USE
+        table.save()
+        usage = TableUsage.objects.create(table=table, started_at=now())
+        menu = Menu.objects.create(booth=self.booth, name='아메리카노', price=4000, stock=10)
+        order = Order.objects.create(
+            table_usage=usage, order_price=8000, original_price=8000, order_status='PAID',
+        )
+        OrderItem.objects.create(
+            order=order, menu=menu, quantity=2, fixed_price=4000, status='COOKING',
+        )
+
+        response = self.client.get(TABLE_LIST_URL)
+        table_data = next(t for t in response.data['data'] if t['table_num'] == 1)
+        order_list = table_data['order_list']
+
+        self.assertEqual(len(order_list), 1)
+        self.assertEqual(order_list[0]['name'], '아메리카노')
+        self.assertEqual(order_list[0]['quantity'], 2)
+        self.assertNotIn('fixed_price', order_list[0])
+
+    def test_get_tables_order_list_max_3(self):
+        """order_list는 최대 3개 반환"""
+        self.client.force_authenticate(user=self.user)
+
+        table = Table.objects.get(booth=self.booth, table_num=1)
+        table.status = Table.Status.IN_USE
+        table.save()
+        usage = TableUsage.objects.create(table=table, started_at=now())
+        order = Order.objects.create(
+            table_usage=usage, order_price=20000, original_price=20000, order_status='PAID',
+        )
+        for i in range(5):
+            menu = Menu.objects.create(booth=self.booth, name=f'메뉴{i}', price=4000, stock=10)
+            OrderItem.objects.create(
+                order=order, menu=menu, quantity=1, fixed_price=4000, status='COOKING',
+            )
+
+        response = self.client.get(TABLE_LIST_URL)
+        table_data = next(t for t in response.data['data'] if t['table_num'] == 1)
+
+        self.assertLessEqual(len(table_data['order_list']), 3)
+
     def test_get_tables_unauthorized(self):
         """인증 없이 조회 시 401"""
         response = self.client.get(TABLE_LIST_URL)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
+class TableRetrieveTestCase(APITestCase):
+    """테이블 디테일 조회 테스트"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
+        self.user = User.objects.get(username='testuser')
+        self.booth = Booth.objects.get(user=self.user)
+        self.client.cookies.clear()
+
+    def _detail_url(self, table_num):
+        return f'{TABLE_LIST_URL}{table_num}/'
+
+    def _activate_table(self, table_num):
+        """테이블 IN_USE + TableUsage 생성"""
+        table = Table.objects.get(booth=self.booth, table_num=table_num)
+        table.status = Table.Status.IN_USE
+        table.save()
+        return TableUsage.objects.create(table=table, started_at=now())
+
+    def _create_order(self, usage, menu_name='아메리카노', price=4000, quantity=2):
+        """Order + OrderItem 생성"""
+        menu = Menu.objects.create(booth=self.booth, name=menu_name, price=price, stock=10)
+        order = Order.objects.create(
+            table_usage=usage,
+            order_price=price * quantity,
+            original_price=price * quantity,
+            order_status='PAID',
+        )
+        OrderItem.objects.create(
+            order=order, menu=menu, quantity=quantity,
+            fixed_price=price, status='COOKING',
+        )
+        return order
+
+    def test_retrieve_success(self):
+        """디테일 조회 성공 - 200"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage)
+
+        response = self.client.get(self._detail_url(1))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+
+    def test_retrieve_response_fields(self):
+        """응답 필드 구조 검증 - table_number, table_total_price, order_items"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage)
+
+        response = self.client.get(self._detail_url(1))
+        data = response.data['data']
+
+        self.assertIn('table_number', data)
+        self.assertIn('table_total_price', data)
+        self.assertIn('order_items', data)
+
+    def test_retrieve_order_items_flat_list(self):
+        """여러 Order의 OrderItem이 하나의 flat list로 반환"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, menu_name='아메리카노', price=4000, quantity=1)
+        self._create_order(usage, menu_name='라떼', price=5000, quantity=2)
+
+        response = self.client.get(self._detail_url(1))
+        order_items = response.data['data']['order_items']
+
+        self.assertIsInstance(order_items, list)
+        self.assertEqual(len(order_items), 2)
+
+    def test_retrieve_order_item_fields(self):
+        """order_items 각 항목에 name, quantity, fixed_price 포함"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, menu_name='아메리카노', price=4000, quantity=2)
+
+        response = self.client.get(self._detail_url(1))
+        item = response.data['data']['order_items'][0]
+
+        self.assertEqual(item['name'], '아메리카노')
+        self.assertEqual(item['quantity'], 2)
+        self.assertEqual(item['fixed_price'], 4000)
+
+    def test_retrieve_total_price(self):
+        """table_total_price가 전체 주문 합계와 일치"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, price=4000, quantity=2)  # 8000
+        self._create_order(usage, menu_name='라떼', price=5000, quantity=1)  # 5000
+
+        response = self.client.get(self._detail_url(1))
+
+        self.assertEqual(response.data['data']['table_total_price'], 13000)
+
+    def test_retrieve_no_active_usage_returns_404(self):
+        """활성 세션 없는 테이블 조회 시 404"""
+        self.client.force_authenticate(user=self.user)
+
+        with suppress_request_warnings():
+            response = self.client.get(self._detail_url(1))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_retrieve_table_not_found_returns_404(self):
+        """존재하지 않는 테이블 조회 시 404"""
+        self.client.force_authenticate(user=self.user)
+
+        with suppress_request_warnings():
+            response = self.client.get(self._detail_url(9999))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_retrieve_unauthorized_returns_401(self):
+        """인증 없이 조회 시 401"""
+        with suppress_request_warnings():
+            response = self.client.get(self._detail_url(1))
+
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 

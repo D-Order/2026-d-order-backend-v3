@@ -1,61 +1,62 @@
 from rest_framework import serializers
-from django.contrib.auth.models import User
-
 from .models import Table
+
 
 class TableListSerializer(serializers.ModelSerializer):
     """테이블 리스트 조회 시 사용하는 시리얼라이저"""
 
     group = serializers.SerializerMethodField()
     accumulated_amount = serializers.SerializerMethodField()
-    recent_3_orders = serializers.SerializerMethodField()
     started_at = serializers.SerializerMethodField()
+    order_list = serializers.SerializerMethodField()
 
     class Meta:
         model = Table
-        fields = ['booth', 'table_num', 'status', 'group', 'accumulated_amount', 'recent_3_orders', 'started_at']
-    
+        fields = [
+            'table_num',
+            'status',
+            'group',
+            'accumulated_amount',
+            'started_at',
+            'order_list'
+        ]
+
+    def _get_usage(self, obj):
+        """context의 usage_map에서 꺼내거나 없으면 직접 조회 (fallback)"""
+        usage_map = self.context.get('usage_map')
+        if usage_map is not None:
+            return usage_map.get(obj.pk)
+        return obj.usages.filter(ended_at__isnull=True).first()
+
     def get_group(self, obj):
-        """테이블 병합 그룹 정보 반환"""
         if obj.group:
-            return {
-                'representative_table': obj.group.representative_table.table_num
-            }
+            return {'representative_table': obj.group.representative_table.table_num}
         return None
-    
-    # TODO : 주문 내역 추가 (최근 3개)
-    def get_recent_3_orders(self, obj):
-        """테이블 최근 3개 주문 내역 반환"""
-        return "notdevelpoed"
-    
-    #     recent_orders = obj.orders.order_by('-created_at')[:3]
-    #     return OrderSerializer(recent_orders, many=True).data
 
     def get_accumulated_amount(self, obj):
-        usage = obj.usages.filter(ended_at__isnull=True).first()
-        if usage:
-            return usage.accumulated_amount
-        return None
-    
+        usage = self._get_usage(obj)
+        return usage.accumulated_amount if usage else None
+
     def get_started_at(self, obj):
-        """테이블 사용 시작 시간 반환"""
-        usage = obj.usages.filter(ended_at__isnull=True).first()
-        if usage:
-            return usage.started_at
-        return None
+        usage = self._get_usage(obj)
+        return usage.started_at if usage else None
 
-
-
-
-class TableDetailSerializer(serializers.ModelSerializer):
-    """테이블 상세 조회 시 사용하는 시리얼라이저"""
-    
-    orders = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Table
-        fields = ['booth', 'table_num', 'status', 'group', 'orders']
-
-    def get_orders(self, obj):
-        """테이블 주문 내역 반환"""
-        return "notdevelpoed"
+    def get_order_list(self, obj):
+        from order.models import OrderItem
+        usage = self._get_usage(obj)
+        if not usage:
+            return []
+        items = (
+            OrderItem.objects
+            .filter(order__table_usage=usage, parent__isnull=True)
+            .exclude(order__order_status='CANCELLED')
+            .select_related('menu', 'setmenu')
+            .order_by('-id')[:3]
+        )
+        return [
+            {
+                'name': item.setmenu.name if item.setmenu_id else (item.menu.name if item.menu else '알 수 없음'),
+                'quantity': item.quantity,
+            }
+            for item in reversed(list(items))
+        ]
