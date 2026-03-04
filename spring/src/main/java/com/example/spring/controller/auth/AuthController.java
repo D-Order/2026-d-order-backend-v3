@@ -11,8 +11,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
+
+
 import java.util.Map;
+import java.util.Collections;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 
 /**
  * 인증 관련 API 컨트롤러 (BFF 패턴)
@@ -31,29 +36,19 @@ public class AuthController {
 
     private final AuthService authService;
     private final CookieUtil cookieUtil;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 로그인 (Django API 프록시)
      * POST /api/v3/spring/auth
      */
     @PostMapping
-    public ResponseEntity<Map<String, Object>> login(
-            @RequestBody LoginRequest request,
-            HttpServletResponse response
-    ) {
+    public ResponseEntity<Map<String, Object>> login(@RequestBody LoginRequest request, HttpServletResponse response) {
         try {
-            // Django API 호출 → 응답의 Set-Cookie가 자동으로 response에 추가됨
-            Map<String, Object> result = authService.login(
-                    request.getUsername(),
-                    request.getPassword(),
-                    response
-            );
+            Map<String, Object> result = authService.login(request.getUsername(), request.getPassword(), response);
             return ResponseEntity.ok(result);
-
-        } catch (IllegalArgumentException e) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("message", "로그인에 실패했습니다.");
-            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (AuthService.DjangoApiException e) {
+            return handleDjangoError(e);
         }
     }
 
@@ -63,12 +58,8 @@ public class AuthController {
      */
     @DeleteMapping
     public ResponseEntity<Map<String, Object>> logout(HttpServletResponse response) {
-        // 쿠키 삭제
         cookieUtil.deleteJwtCookies(response);
-
-        Map<String, Object> responseBody = new HashMap<>();
-        responseBody.put("message", "로그아웃 성공");
-        return ResponseEntity.ok(responseBody);
+        return ResponseEntity.ok(Collections.singletonMap("message", "로그아웃 성공"));
     }
 
     /**
@@ -80,33 +71,35 @@ public class AuthController {
      * - Refresh 만료 → 401 에러
      */
     @PostMapping("/refresh")
-    public ResponseEntity<Map<String, Object>> refreshToken(
-            HttpServletRequest request,
-            HttpServletResponse response
-    ) {
-        // 쿠키에서 토큰 추출
+    public ResponseEntity<Map<String, Object>> refreshToken(HttpServletRequest request, HttpServletResponse response) {
         String accessToken = cookieUtil.getAccessTokenFromCookies(request.getCookies());
         String refreshToken = cookieUtil.getRefreshTokenFromCookies(request.getCookies());
 
-        // Refresh 토큰이 없으면 바로 401
         if (refreshToken == null) {
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("message", "Refresh 토큰 없음");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Collections.singletonMap("message", "Refresh 토큰 없음"));
         }
 
         try {
-            // Django API 호출
             Map<String, Object> result = authService.refreshToken(accessToken, refreshToken, response);
             return ResponseEntity.ok(result);
+        } catch (AuthService.DjangoApiException e) {
+            cookieUtil.deleteJwtCookies(response);
+            return handleDjangoError(e);
+        }
+    }
 
-        } catch (AuthService.UnauthorizedException e) {
-            // Refresh 토큰 만료 또는 유효하지 않음
-            cookieUtil.deleteJwtCookies(response); // 쿠키 삭제
-            
-            Map<String, Object> errorResponse = new HashMap<>();
-            errorResponse.put("message", "Refresh 토큰이 만료되었습니다. 다시 로그인해주세요.");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    /**
+     * Django API 에러를 파싱하여 프론트로 반환하는 공통 메서드
+     */
+    private ResponseEntity<Map<String, Object>> handleDjangoError(AuthService.DjangoApiException e) {
+        try {
+            // Django의 응답 body를 Map으로 변환
+            Map<String, Object> errorBody = objectMapper.readValue(e.getResponseBody(), Map.class);
+            return ResponseEntity.status(e.getStatus()).body(errorBody);
+        } catch (Exception ex) {
+            // JSON 파싱 실패 시 기본 응답
+            return ResponseEntity.status(e.getStatus())
+                    .body(Collections.singletonMap("message", "인증 처리 중 오류가 발생했습니다."));
         }
     }
 }
