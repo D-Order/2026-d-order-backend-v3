@@ -14,8 +14,15 @@ class TableGroup(models.Model):
     )
     merged_at = models.DateTimeField(default=now)
 
+    class Meta:
+        verbose_name = '테이블 그룹'
+        verbose_name_plural = '테이블 그룹 목록'
+        ordering = ['-merged_at']
+
     def __str__(self):
-        return f"부스 {self.representative_table.booth.name} - 대표 테이블 : {self.representative_table.table_num}  / 병합된 테이블: {[table.table_num for table in self.tables.all()]} / 병합 시간: {self.merged_at}"
+        if self.representative_table:
+            return f"[그룹 {self.pk}] {self.representative_table.booth.name} - 대표 테이블 {self.representative_table.table_num}"
+        return f"[그룹 {self.pk}] (대표 테이블 없음)"
 
 class Table(models.Model):
     id = models.AutoField(primary_key=True)
@@ -37,10 +44,13 @@ class Table(models.Model):
         blank=True
     )
     class Meta:
-        unique_together = [['booth', 'table_num']]  # 같은 부스 내 번호 중복 방지
+        verbose_name = '테이블'
+        verbose_name_plural = '테이블 목록'
+        unique_together = [['booth', 'table_num']]
+        ordering = ['booth', 'table_num']
 
     def __str__(self):
-        return f"부스 {self.booth.name} - 테이블 {self.table_num} {self.status}"
+        return f"[{self.booth.name}] 테이블 {self.table_num} ({self.get_status_display()})"
     
 class TableUsage(models.Model):
     id = models.AutoField(primary_key=True)
@@ -50,6 +60,12 @@ class TableUsage(models.Model):
     usage_minutes = models.IntegerField(null=True, blank=True)
     accumulated_amount = models.IntegerField(null=False,default=0) # 테이블 세션 누적 총액
 
+    class Meta:
+        verbose_name = '테이블 사용 기록'
+        verbose_name_plural = '테이블 사용 기록 목록'
+        ordering = ['-started_at']
+
     def __str__(self):
-        return f"테이블 {self.table.table_num} 사용 기록: {self.started_at} - {self.ended_at} / 사용 시간(분): {self.usage_minutes} / 주문 총액 : {self.accumulated_amount}"
+        status = '사용중' if self.ended_at is None else f"{self.usage_minutes}분 사용"
+        return f"[{self.table.booth.name}] 테이블 {self.table.table_num} - {self.started_at:%Y-%m-%d %H:%M} ({status}, {self.accumulated_amount:,}원)"
     
