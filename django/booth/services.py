@@ -1,5 +1,8 @@
 from booth.models import Booth
 from menu.models import Menu
+from table.models import Table, TableGroup, TableUsage
+from django.db import transaction
+from rest_framework.exceptions import ValidationError
 
 class BoothService:
 
@@ -90,4 +93,41 @@ class BoothService:
                 fee_menu.description = "FREE"
             fee_menu.save()
 
+    @staticmethod
+    @transaction.atomic
+    def reset_booth_table_usage(booth):
+        """부스의 모든 TableUsage 삭제 및 테이블 초기화
+        Args:
+            booth (Booth): 초기화할 부스
 
+        Returns:
+            int: 삭제된 TableUsage 개수
+
+        Raises:
+            ValidationError: IN_USE 상태의 테이블이 하나라도 있을 때
+        """
+        # 1. IN_USE 테이블 존재 여부 확인
+        if Table.objects.filter(booth=booth, status=Table.Status.IN_USE).exists():
+            raise ValidationError('사용 중인 테이블이 있어 초기화할 수 없습니다.')
+
+        # 2. 모든 그룹 해제 및 삭제
+        group_ids = list(
+            TableGroup.objects
+            .filter(tables__booth=booth)
+            .values_list('pk', flat=True)
+            .distinct()
+        )
+        if group_ids:
+            Table.objects.filter(booth=booth).update(group=None)
+            TableGroup.objects.filter(pk__in=group_ids).delete()
+
+        # 3. Order 먼저 삭제 (Order.cart가 PROTECT이므로 Cart 삭제 전에 제거 필요)
+        #    Order 삭제 시 OrderItem은 CASCADE로 자동 삭제됨
+        from order.models import Order
+        Order.objects.filter(table_usage__table__booth=booth).delete()
+
+        # 4. 모든 TableUsage 삭제
+        #    Cart.table_usage가 CASCADE이므로 Cart도 함께 삭제됨
+        deleted_count, _ = TableUsage.objects.filter(table__booth=booth).delete()
+
+        return deleted_count
