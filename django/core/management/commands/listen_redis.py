@@ -109,18 +109,6 @@ class Command(BaseCommand):
                 import traceback
                 self.stderr.write(traceback.format_exc())
 
-        # 서빙 수락 취소 (Rollback): spring:booth:{id}:order:cooked
-        elif action == "cooked":
-            try:
-                result = OrderService.handle_serving_rollback_event(data)
-                self.stdout.write(self.style.SUCCESS(
-                    f"[서빙 롤백] booth:{booth_id} → {result}"
-                ))
-            except Exception as e:
-                self.stderr.write(self.style.ERROR(f"[서빙 롤백 실패] {e}"))
-                import traceback
-                self.stderr.write(traceback.format_exc())
-
         # 기타 order 이벤트 → WebSocket 브로드캐스트
         else:
             event_type_map = {
