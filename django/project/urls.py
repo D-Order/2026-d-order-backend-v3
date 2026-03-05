@@ -17,18 +17,25 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-
 from django.conf.urls.static import static
 
 from .views import health_check
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path('api/v3/auth/', include('authentication.urls')),
-    path('api/v3/booth/', include('booth.urls')),
+    path('django/admin/', admin.site.urls),
+    path('api/v3/django/auth/', include('authentication.urls')),
+    path('api/v3/django/booth/', include('booth.urls')),
+    path('api/v3/django/booth/', include('table.urls')),
+    path('api/v3/django/booth/', include('menu.urls')),
+    path('api/v3/django/cart/', include('cart.urls')),
+    path('api/v3/django/coupon/', include('coupon.urls')),
+    path('api/v3/django/order/', include('order.urls')),
     path('health/', health_check),
 ]
 
-if settings.DEBUG: # 배포 환경에선 ngingx가 static/media 처리할거라서 이 부분은 무시할거
+if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.IS_LOCAL:
+    urlpatterns += [path('api/v3/django/silk/', include('silk.urls', namespace='silk'))]

@@ -80,6 +80,10 @@ INSTALLED_APPS = [
     'core',
     'booth',
     'table',
+    'cart',
+    'coupon',
+    'menu',
+    'order',
 
     # S3
     'storages',
@@ -132,14 +136,26 @@ REDIS_HOST = env('REDIS_HOST')
 REDIS_PORT = env('REDIS_PORT')
 REDIS_PASSWORD = env('REDIS_PASSWORD')
 
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"],
+import sys
+if 'PYTEST_CURRENT_TEST' in os.environ:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        }
+    }
+else:
+    if REDIS_PASSWORD:
+        redis_url = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}"
+    else:
+        redis_url = f"redis://{REDIS_HOST}:{REDIS_PORT}"
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [redis_url],
+            },
         },
-    },
-}
+    }
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
@@ -161,13 +177,8 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        'OPTIONS': {'min_length': 4},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
@@ -195,6 +206,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
+    'EXCEPTION_HANDLER': 'utils.exceptions.custom_exception_handler',
 }
 
 # Default primary key field type
@@ -264,6 +276,12 @@ LOGGING = {
         },
     },
 }
+
+# Silk 프로파일링 설정 (로컬 전용)
+if IS_LOCAL:
+    INSTALLED_APPS += ['silk']
+    MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
+    SILKY_PYTHON_PROFILER = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
@@ -389,3 +407,4 @@ SECURE_CONTENT_SECURITY_POLICY = {
 
 # Clickjacking 보호
 X_FRAME_OPTIONS = 'DENY'
+

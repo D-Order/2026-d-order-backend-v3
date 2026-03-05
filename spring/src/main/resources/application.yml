@@ -17,6 +17,27 @@ spring:
         # MySQLDialect를 PostgreSQLDialect로 변경
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+# ==================================================================
+# JWT 설정 (Django에서 발급한 토큰 검증용)
+# ==================================================================
+jwt:
+  secret-key: ${SECRET_KEY}
+  access-token-expiration: 900000 # 15분 (밀리초)
+  refresh-token-expiration: 3600000 # 1시간 (밀리초)
+  cookie:
+    access-token-name: access_token
+    refresh-token-name: refresh_token
+    http-only: true
+    same-site: Lax
+    secure: false # 로컬에서는 false, 프로덕션에서는 true
+
+# ==================================================================
+# Django API 설정 (BFF 패턴)
+# ==================================================================
+django:
+  api:
+    base-url: ${DJANGO_API_URL:http://localhost:8000}
+
 ---
 # ==================================================================
 # local 환경 전용 설정
@@ -37,6 +58,12 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+  # Redis 설정을 추가
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
 ---
 # ==================================================================

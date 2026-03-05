@@ -29,6 +29,8 @@ def publish(channel: str, data: dict):
     try:
         client = get_redis_client()
         message_json = json.dumps(data, ensure_ascii=False)
+        channel = f"django:{channel}"
+        logger.info(channel)
         client.publish(channel, message_json)
         logger.info(f"[Redis Pub] {channel} : {message_json}")
     except Exception as e:
