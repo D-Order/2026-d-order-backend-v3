@@ -41,6 +41,11 @@ class Booth(models.Model):
 
     qr_image = models.ImageField(upload_to='qr_images/', blank=True, null=True, help_text='부스 전용 QR 코드 이미지')
     thumbnail_image = models.ImageField(upload_to='thumbnails/', blank=True, null=True, help_text='부스 썸네일 이미지')
+
+    class Meta:
+        verbose_name = '부스'
+        verbose_name_plural = '부스 목록'
+        ordering = ['pk']
     def generate_qr(self):
 
         # 기존 QR 이미지가 있으면 삭제
