@@ -126,6 +126,29 @@ class TableListTestCase(APITestCase):
         self.assertEqual(order_list[0]['quantity'], 2)
         self.assertNotIn('fixed_price', order_list[0])
 
+    def test_get_tables_order_list_newest_first(self):
+        """order_list는 최신 항목이 먼저 반환"""
+        self.client.force_authenticate(user=self.user)
+
+        table = Table.objects.get(booth=self.booth, table_num=1)
+        table.status = Table.Status.IN_USE
+        table.save()
+        usage = TableUsage.objects.create(table=table, started_at=now())
+        order = Order.objects.create(
+            table_usage=usage, order_price=10000, original_price=10000, order_status='PAID',
+        )
+        menu1 = Menu.objects.create(booth=self.booth, name='첫번째메뉴', price=3000, stock=10)
+        menu2 = Menu.objects.create(booth=self.booth, name='두번째메뉴', price=3000, stock=10)
+        OrderItem.objects.create(order=order, menu=menu1, quantity=1, fixed_price=3000, status='COOKING')
+        OrderItem.objects.create(order=order, menu=menu2, quantity=1, fixed_price=3000, status='COOKING')
+
+        response = self.client.get(TABLE_LIST_URL)
+        table_data = next(t for t in response.data['data'] if t['table_num'] == 1)
+        order_list = table_data['order_list']
+
+        self.assertEqual(order_list[0]['name'], '두번째메뉴')
+        self.assertEqual(order_list[1]['name'], '첫번째메뉴')
+
     def test_get_tables_order_list_max_3(self):
         """order_list는 최대 3개 반환"""
         self.client.force_authenticate(user=self.user)
@@ -228,7 +251,7 @@ class TableRetrieveTestCase(APITestCase):
         self.assertEqual(len(order_items), 2)
 
     def test_retrieve_order_item_fields(self):
-        """order_items 각 항목에 name, quantity, fixed_price 포함"""
+        """order_items 각 항목에 name, quantity, fixed_price, created_at 포함"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='아메리카노', price=4000, quantity=2)
@@ -239,17 +262,34 @@ class TableRetrieveTestCase(APITestCase):
         self.assertEqual(item['name'], '아메리카노')
         self.assertEqual(item['quantity'], 2)
         self.assertEqual(item['fixed_price'], 4000)
+        self.assertIn('created_at', item)
+        self.assertIsNotNone(item['created_at'])
 
     def test_retrieve_total_price(self):
-        """table_total_price가 전체 주문 합계와 일치"""
+        """table_total_price가 usage.accumulated_amount와 일치"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
-        self._create_order(usage, price=4000, quantity=2)  # 8000
+        self._create_order(usage, price=4000, quantity=2)   # 8000
         self._create_order(usage, menu_name='라떼', price=5000, quantity=1)  # 5000
+        usage.accumulated_amount = 13000
+        usage.save()
 
         response = self.client.get(self._detail_url(1))
 
         self.assertEqual(response.data['data']['table_total_price'], 13000)
+
+    def test_retrieve_order_items_newest_first(self):
+        """order_items는 최신 항목이 먼저 반환"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, menu_name='첫번째메뉴', price=3000, quantity=1)
+        self._create_order(usage, menu_name='두번째메뉴', price=3000, quantity=1)
+
+        response = self.client.get(self._detail_url(1))
+        order_items = response.data['data']['order_items']
+
+        self.assertEqual(order_items[0]['name'], '두번째메뉴')
+        self.assertEqual(order_items[1]['name'], '첫번째메뉴')
 
     def test_retrieve_no_active_usage_returns_404(self):
         """활성 세션 없는 테이블 조회 시 404"""

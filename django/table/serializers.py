@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Table
+from django.utils import timezone
 
 
 class TableListSerializer(serializers.ModelSerializer):
@@ -39,7 +40,7 @@ class TableListSerializer(serializers.ModelSerializer):
 
     def get_started_at(self, obj):
         usage = self._get_usage(obj)
-        return usage.started_at if usage else None
+        return timezone.localtime(usage.started_at).isoformat() if usage else None
 
     def get_order_list(self, obj):
         from order.models import OrderItem
@@ -57,6 +58,7 @@ class TableListSerializer(serializers.ModelSerializer):
             {
                 'name': item.setmenu.name if item.setmenu_id else (item.menu.name if item.menu else '알 수 없음'),
                 'quantity': item.quantity,
+                'created_at': timezone.localtime(item.created_at).isoformat()
             }
-            for item in reversed(list(items))
+            for item in items
         ]
