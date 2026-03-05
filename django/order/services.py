@@ -597,6 +597,123 @@ class OrderService:
 
         return {"result": "success", "status": target_status}
 
+    # ─────────────────────────────────────────────
+    # Redis 구독: 스프링부트 → 서빙 수락 취소 (Rollback)
+    # spring:booth:{boothId}:order:cooked
+    # ServingTask → OrderItem (SERVING → COOKED)
+    # ─────────────────────────────────────────────
+    @staticmethod
+    @transaction.atomic
+    def handle_serving_rollback_event(event_data: dict) -> dict:
+        """
+        스프링부트에서 서빙 수락을 취소(되돌리기)했을 때 호출.
+        OrderItem.status를 SERVING → COOKED로 롤백한다.
+
+        채널: spring:booth:{boothId}:order:cooked
+
+        event_data:
+          - order_item_id: int
+          - pushed_at: str (optional)
+        """
+        order_item_id = event_data.get("order_item_id")
+        if not order_item_id:
+            logger.warning(f"[ServingRollback] order_item_id 누락: {event_data}")
+            return {"result": "missing_order_item_id"}
+
+        try:
+            item = (
+                OrderItem.objects
+                .select_related("order__table_usage__table", "menu", "setmenu", "parent__setmenu")
+                .select_for_update(of=("self",))
+                .get(pk=order_item_id)
+            )
+        except OrderItem.DoesNotExist:
+            logger.warning(f"[ServingRollback] OrderItem 없음: id={order_item_id}")
+            return {"result": "not_found"}
+
+        # 세트메뉴 부모 아이템은 직접 상태 변경 불가
+        if item.setmenu_id and item.parent_id is None:
+            logger.warning(f"[ServingRollback] 세트메뉴 부모 아이템 롤백 시도: id={order_item_id}")
+            return {"result": "invalid_target"}
+
+        # SERVING 상태가 아니면 롤백 불가
+        if item.status != "SERVING":
+            logger.warning(
+                f"[ServingRollback] SERVING 상태가 아님: id={order_item_id}, "
+                f"current_status={item.status}"
+            )
+            return {"result": "invalid_status", "current_status": item.status}
+
+        old_status = item.status
+
+        # 상태 롤백: SERVING → COOKED
+        item.status = "COOKED"
+        item.save(update_fields=["status"])
+
+        order = item.order
+        table = order.table_usage.table
+        booth_id = table.booth_id
+        table_num = table.table_num
+
+        # 메뉴명 (자식 아이템이면 부모 세트메뉴명 포함)
+        if item.parent_id is not None:
+            menu_name = item.menu.name if item.menu_id else "알 수 없음"
+            set_menu_name = item.parent.setmenu.name if item.parent and item.parent.setmenu_id else None
+        elif item.menu_id:
+            menu_name = item.menu.name
+            set_menu_name = None
+        else:
+            menu_name = "알 수 없음"
+            set_menu_name = None
+
+        logger.info(
+            f"[ServingRollback] item_id={order_item_id} "
+            f"{old_status} → COOKED (booth:{booth_id})"
+        )
+
+        # WebSocket: ADMIN_ORDER_UPDATE (롤백된 상태 전달)
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+
+            group_name = f"booth_{booth_id}.order"
+            channel_layer = get_channel_layer()
+
+            items_payload = [{
+                "order_item_id": order_item_id,
+                "menu_name": menu_name,
+                "status": "COOKED",
+                "is_set": item.parent_id is not None,
+                "set_menu_name": set_menu_name,
+                "parent_order_item_id": item.parent_id,
+                "cooked_at": timezone.localtime(item.cooked_at).isoformat() if item.cooked_at else None,
+                "served_at": None,
+            }]
+
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    "type": "admin_order_update",
+                    "data": {
+                        "order_id": order.pk,
+                        "items": items_payload,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"[ServingRollback] WebSocket ADMIN_ORDER_UPDATE 전송 실패: {e}")
+
+        # ─── 테이블 WebSocket 브로드캐스트 ───
+        try:
+            from table.services import OrderBroadcastService
+            OrderBroadcastService.broadcast_order_update(
+                booth_id, table_num, order.table_usage_id
+            )
+        except Exception as e:
+            logger.error(f"[ServingRollback] 테이블 WS 브로드캐스트 실패: {e}")
+
+        return {"result": "success", "status": "COOKED"}
+
     @staticmethod
     @transaction.atomic
     def create_order_from_event(event_data: dict) -> dict:
