@@ -334,6 +334,116 @@ class TableService:
 
 
     @staticmethod
+    def _merge_active_usages(all_table_ids, representative_table):
+        """병합 대상 테이블들의 활성 TableUsage를 대표 테이블 Usage로 통합
+
+        Order, Cart(CartItem/CartCouponApply), TableCoupon을 대표 usage로 이전한 뒤
+        나머지 usage를 삭제한다.
+
+        Args:
+            all_table_ids (list of int): 병합 대상 모든 테이블의 PK 목록
+            representative_table (Table Entity): 대표 테이블
+        """
+        from order.models import Order
+        from cart.models import Cart
+        from coupon.models import TableCoupon
+
+        active_usages = list(
+            TableUsage.objects.filter(table_id__in=all_table_ids, ended_at__isnull=True)
+        )
+        if not active_usages:
+            return
+
+        earliest_started_at = min(u.started_at for u in active_usages)
+        total_accumulated = sum(u.accumulated_amount for u in active_usages)
+
+        # 대표 usage 결정: 대표 테이블의 활성 usage가 없으면 가장 이른 usage를 재할당
+        rep_usage = next((u for u in active_usages if u.table_id == representative_table.id), None)
+        if rep_usage is None:
+            rep_usage = min(active_usages, key=lambda u: u.started_at)
+            rep_usage.table = representative_table
+            rep_usage.save(update_fields=['table'])
+
+        other_usage_ids = [u.id for u in active_usages if u.id != rep_usage.id]
+
+        if other_usage_ids:
+            # Order: 대표 usage로 일괄 재할당
+            Order.objects.filter(table_usage_id__in=other_usage_ids).update(table_usage=rep_usage)
+
+            # Cart: 대표 cart로 병합
+            rep_cart = Cart.objects.filter(table_usage=rep_usage).first()
+            other_carts = list(
+                Cart.objects.prefetch_related('items').filter(table_usage_id__in=other_usage_ids)
+            )
+
+            # 대표 cart 없으면 other_carts 중 첫 번째를 재할당
+            if rep_cart is None and other_carts:
+                rep_cart = other_carts.pop(0)
+                rep_cart.table_usage = rep_usage
+                rep_cart.save(update_fields=['table_usage'])
+                # pop된 cart의 pending 쿠폰 반환
+                # (이후 루프에서 other_carts만 처리하므로 여기서 명시적으로 처리)
+                rep_cart.applied_coupons.filter(round=rep_cart.round).delete()
+
+            # 나머지 other_carts 아이템을 rep_cart에 병합
+            if rep_cart and other_carts:
+                for other_cart in other_carts:
+                    for item in other_cart.items.all():
+                        filter_key = 'menu_id' if item.menu_id else 'setmenu_id'
+                        existing = rep_cart.items.filter(**{filter_key: getattr(item, filter_key)}).first()
+                        if existing:
+                            # 동일 메뉴 존재 → 수량만 합산 (UniqueConstraint 충돌 방지)
+                            existing.quantity += item.quantity
+                            existing.save(update_fields=['quantity'])
+                        else:
+                            item.cart = rep_cart
+                            item.save(update_fields=['cart'])
+                    rep_cart.cart_price += other_cart.cart_price
+                rep_cart.save(update_fields=['cart_price'])
+
+                # CartCouponApply: rep_cart으로 히스토리 보존
+                # rep_cart.round 기준으로 시작 → pending 쿠폰(현재 라운드)을 건드리지 않음
+                # pop된 경우 pending 쿠폰이 이미 삭제됐으므로 현재 round는 빈 슬롯
+                round_offset = rep_cart.round
+                for other_cart in other_carts:
+                    for apply in other_cart.applied_coupons.order_by('round'):
+                        if apply.round < other_cart.round:
+                            # 과거 라운드 (주문 완료된 기록) → rep_cart로 이전
+                            round_offset += 1
+                            apply.cart = rep_cart
+                            apply.round = round_offset
+                            apply.save(update_fields=['cart', 'round'])
+                        else:
+                            # 현재 라운드 (주문 전 pending 쿠폰) → 삭제하여 코드 반환
+                            # CouponCode.used_at은 결제 확정 시에만 설정되므로 별도 초기화 불필요
+                            apply.delete()
+                # rep_cart.round이 마이그레이션된 round보다 작으면 맞춰줌
+                # (다음 cart.round += 1 시 충돌 방지)
+                if round_offset > rep_cart.round:
+                    rep_cart.round = round_offset
+                    rep_cart.save(update_fields=['round'])
+
+            # 나머지 other_usage_ids의 cart 삭제 (CartItem CASCADE, CartCouponApply는 이미 이전됨)
+            Cart.objects.filter(table_usage_id__in=other_usage_ids).delete()
+
+            # TableCoupon: 대표에 없으면 하나 재할당, 나머지 삭제
+            if not TableCoupon.objects.filter(table_usage=rep_usage).exists():
+                other_coupon = TableCoupon.objects.filter(table_usage_id__in=other_usage_ids).first()
+                if other_coupon:
+                    other_coupon.table_usage = rep_usage
+                    other_coupon.save(update_fields=['table_usage'])
+            # 재할당된 쿠폰은 table_usage가 변경됐으므로 아래 delete에서 제외됨
+            TableCoupon.objects.filter(table_usage_id__in=other_usage_ids).delete()
+
+            # other usage 삭제 (관련 레코드 모두 처리 완료)
+            TableUsage.objects.filter(id__in=other_usage_ids).delete()
+
+        # rep_usage 최종 업데이트
+        rep_usage.started_at = earliest_started_at
+        rep_usage.accumulated_amount = total_accumulated
+        rep_usage.save(update_fields=['started_at', 'accumulated_amount'])
+
+    @staticmethod
     @transaction.atomic
     def merge_tables(booth, table_nums):
         """테이블 병합 그룹 생성하고 연결 (관리자 전용)
@@ -396,11 +506,15 @@ class TableService:
         merged_table_nums = [t.table_num for t in all_tables]
         representative_table = min(all_tables, key=lambda t: t.table_num)
 
-        # 8. 새 그룹 생성 후 일괄 업데이트
+        # 8. 활성 TableUsage 통합 (대표 테이블로 병합)
+        all_table_ids = [t.id for t in all_tables]
+        TableService._merge_active_usages(all_table_ids, representative_table)
+
+        # 9. 새 그룹 생성 후 일괄 업데이트
         table_group = TableGroup.objects.create(representative_table=representative_table)
         Table.objects.filter(booth=booth, table_num__in=merged_table_nums).update(group=table_group)
 
-        # 9. 기존 그룹 삭제
+        # 10. 기존 그룹 삭제
         if groups_to_merge:
             TableGroup.objects.filter(pk__in=groups_to_merge).delete()
 
