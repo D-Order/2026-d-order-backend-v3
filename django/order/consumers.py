@@ -1,6 +1,6 @@
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
-from django.db.models import Sum, F, Value, CharField, Prefetch
+from django.db.models import F, Value, CharField, Prefetch
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from asgiref.sync import sync_to_async
@@ -268,17 +268,9 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         return await sync_to_async(_query)()
 
     async def _get_total_sales(self):
-        """해당 부스의 전체 주문(PAID + COMPLETED) 총 매출 합산"""
-        def _query():
-            return (
-                Order.objects
-                .filter(
-                    order_status__in=["PAID", "COMPLETED"],
-                    table_usage__table__booth_id=self.booth_id,
-                )
-                .aggregate(total=Sum("order_price"))["total"]
-            ) or 0
-        return await sync_to_async(_query)()
+        """오늘 매출 (캐시 우선, 미스 시 DB 초기화)"""
+        from order.cache import get_today_revenue
+        return await sync_to_async(get_today_revenue)(self.booth_id)
 
     # ───────────────────────────────────────────
     # ⑦ TOTAL_SALES_UPDATE (group_send handler)
@@ -407,23 +399,29 @@ class BoothSalesConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
 
     # ① TOTAL_SALES_SNAPSHOT
     async def _send_sales_snapshot(self):
-        total_sales = await self._get_total_sales()
+        today_revenue = await self._get_today_revenue()
         await self.send_json({
             "type": "TOTAL_SALES_SNAPSHOT",
             "timestamp": timezone.localtime().isoformat(),
             "data": {
-                "total_sales": total_sales,
+                "today_revenue": today_revenue,
             },
         })
 
     # ② TOTAL_SALES_UPDATE (group_send handler)
     async def total_sales_update(self, event):
-        total_sales = await self._get_total_sales()
+        data = event.get("data", {})
+        # 서비스 레이어에서 이미 계산한 값이 있으면 재조회 없이 바로 전송
+        if "today_revenue" in data:
+            today_revenue = data["today_revenue"]
+        else:
+            today_revenue = await self._get_today_revenue()
+
         await self.send_json({
             "type": "TOTAL_SALES_UPDATE",
             "timestamp": timezone.localtime().isoformat(),
             "data": {
-                "total_sales": total_sales,
+                "today_revenue": today_revenue,
             },
         })
 
@@ -443,16 +441,8 @@ class BoothSalesConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
     async def admin_menu_aggregation(self, event):
         pass
 
-    async def _get_total_sales(self):
-        """부스의 전체 주문(PAID + COMPLETED) 총 매출(order_price 합산)"""
-        def _query():
-            return (
-                Order.objects
-                .filter(
-                    order_status__in=["PAID", "COMPLETED"],
-                    table_usage__table__booth_id=self.booth_id,
-                )
-                .aggregate(total=Sum("order_price"))["total"]
-            ) or 0
-        return await sync_to_async(_query)()
+    async def _get_today_revenue(self):
+        """오늘 매출 (캐시 우선, 미스 시 DB 초기화)"""
+        from order.cache import get_today_revenue
+        return await sync_to_async(get_today_revenue)(self.booth_id)
 
