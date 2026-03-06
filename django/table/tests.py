@@ -1,5 +1,6 @@
 import logging
-from django.test import override_settings, TransactionTestCase
+from datetime import timedelta
+from django.test import override_settings, TransactionTestCase, TestCase
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
@@ -834,3 +835,330 @@ class TableConsumerServiceIntegrationTest(TransactionTestCase):
         self.assertEqual(response['data']['count'], 3)
 
         await communicator.disconnect()
+
+
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
+class MergeActiveUsagesTestCase(TestCase):
+    """TableService._merge_active_usages 단위 테스트
+
+    Known limitation:
+        rep_cart가 other_carts에서 pop된 경우, 해당 cart의 pending 쿠폰이
+        나머지 other_carts의 historical 쿠폰 이전으로 인해 round가 밀려
+        유실될 수 있음. (rep_cart.round > pending 쿠폰의 round)
+    """
+
+    def setUp(self):
+        client = APIClient()
+        client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
+        self.user = User.objects.get(username='testuser')
+        self.booth = Booth.objects.get(user=self.user)
+        self.t1 = Table.objects.get(booth=self.booth, table_num=1)
+        self.t2 = Table.objects.get(booth=self.booth, table_num=2)
+        self.t3 = Table.objects.get(booth=self.booth, table_num=3)
+        self.menu1 = Menu.objects.create(booth=self.booth, name='아메리카노', price=4000, stock=10)
+        self.menu2 = Menu.objects.create(booth=self.booth, name='라떼', price=5000, stock=10)
+
+        from coupon.models import Coupon
+        self.coupon = Coupon.objects.create(
+            booth=self.booth, name='10% 할인', discount_type='RATE', discount_value=10
+        )
+        self._code_counter = 0
+
+    # ─── Helpers ──────────────────────────────────────────────────────────
+
+    def _usage(self, table, minutes_ago=0, accumulated=0):
+        return TableUsage.objects.create(
+            table=table,
+            started_at=now() - timedelta(minutes=minutes_ago),
+            accumulated_amount=accumulated,
+        )
+
+    def _cart(self, usage, cart_price=0, round=0):
+        from cart.models import Cart
+        return Cart.objects.create(table_usage=usage, cart_price=cart_price, round=round)
+
+    def _cart_item(self, cart, menu, quantity=1):
+        from cart.models import CartItem
+        return CartItem.objects.create(cart=cart, menu=menu, quantity=quantity, price_at_cart=menu.price)
+
+    def _coupon_code(self):
+        self._code_counter += 1
+        from coupon.models import CouponCode
+        return CouponCode.objects.create(coupon=self.coupon, code=f'CODE{self._code_counter:04d}')
+
+    def _cart_coupon_apply(self, cart, round, code):
+        from coupon.models import CartCouponApply
+        return CartCouponApply.objects.create(cart=cart, round=round, coupon_code=code)
+
+    def _table_coupon(self, usage):
+        from coupon.models import TableCoupon
+        return TableCoupon.objects.create(coupon=self.coupon, table_usage=usage)
+
+    def _order(self, usage, price=1000):
+        return Order.objects.create(table_usage=usage, order_price=price, original_price=price, order_status='PAID')
+
+    def _call(self, tables):
+        all_table_ids = [t.id for t in tables]
+        representative_table = min(tables, key=lambda t: t.table_num)
+        TableService._merge_active_usages(all_table_ids, representative_table)
+        return representative_table
+
+    def _rep_usage(self, rep_table):
+        return TableUsage.objects.get(table=rep_table, ended_at__isnull=True)
+
+    # ─── 기본 동작 ────────────────────────────────────────────────────────
+
+    def test_활성_usage_없으면_아무것도_변경되지_않음(self):
+        self._call([self.t1, self.t2])
+        self.assertEqual(TableUsage.objects.count(), 0)
+
+    def test_rep_테이블에만_usage_있으면_종료되지_않음(self):
+        usage = self._usage(self.t1, minutes_ago=30, accumulated=5000)
+        self._call([self.t1, self.t2])
+        usage.refresh_from_db()
+        self.assertIsNone(usage.ended_at)
+        self.assertEqual(usage.table, self.t1)
+
+    # ─── TableUsage 병합 ──────────────────────────────────────────────────
+
+    def test_accumulated_amount_합산됨(self):
+        self._usage(self.t1, accumulated=3000)
+        self._usage(self.t2, accumulated=5000)
+        self._call([self.t1, self.t2])
+        self.assertEqual(self._rep_usage(self.t1).accumulated_amount, 8000)
+
+    def test_accumulated_amount_3개_합산됨(self):
+        self._usage(self.t1, accumulated=1000)
+        self._usage(self.t2, accumulated=2000)
+        self._usage(self.t3, accumulated=3000)
+        self._call([self.t1, self.t2, self.t3])
+        self.assertEqual(self._rep_usage(self.t1).accumulated_amount, 6000)
+
+    def test_earliest_started_at_적용됨(self):
+        early = now() - timedelta(minutes=60)
+        late = now() - timedelta(minutes=10)
+        TableUsage.objects.create(table=self.t1, started_at=late)
+        TableUsage.objects.create(table=self.t2, started_at=early)
+        self._call([self.t1, self.t2])
+        rep = self._rep_usage(self.t1)
+        self.assertAlmostEqual(rep.started_at.timestamp(), early.timestamp(), delta=1)
+
+    def test_other_usage_삭제됨(self):
+        self._usage(self.t1)
+        self._usage(self.t2)
+        self._usage(self.t3)
+        self._call([self.t1, self.t2, self.t3])
+        self.assertEqual(TableUsage.objects.filter(ended_at__isnull=True).count(), 1)
+        self.assertTrue(TableUsage.objects.filter(table=self.t1, ended_at__isnull=True).exists())
+
+    def test_rep_테이블_usage_없을때_가장_이른_usage_재할당됨(self):
+        TableUsage.objects.create(table=self.t2, started_at=now() - timedelta(minutes=60))
+        TableUsage.objects.create(table=self.t3, started_at=now() - timedelta(minutes=10))
+        self._call([self.t1, self.t2, self.t3])
+        self.assertTrue(TableUsage.objects.filter(table=self.t1, ended_at__isnull=True).exists())
+        self.assertEqual(TableUsage.objects.filter(ended_at__isnull=True).count(), 1)
+
+    # ─── Order 재할당 ─────────────────────────────────────────────────────
+
+    def test_other_usage의_order가_rep_usage로_재할당됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        o1 = self._order(u1)
+        o2 = self._order(u2)
+        self._call([self.t1, self.t2])
+        rep = self._rep_usage(self.t1)
+        o1.refresh_from_db()
+        o2.refresh_from_db()
+        self.assertEqual(o1.table_usage, rep)
+        self.assertEqual(o2.table_usage, rep)
+
+    def test_order_개수_손실_없음(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        for _ in range(3):
+            self._order(u1)
+        for _ in range(2):
+            self._order(u2)
+        self._call([self.t1, self.t2])
+        rep = self._rep_usage(self.t1)
+        self.assertEqual(Order.objects.filter(table_usage=rep).count(), 5)
+
+    # ─── Cart 병합 ────────────────────────────────────────────────────────
+
+    def test_rep_cart_없을때_other_cart_재할당됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart2 = self._cart(u2, cart_price=5000)
+        self._call([self.t1, self.t2])
+        cart2.refresh_from_db()
+        self.assertEqual(cart2.table_usage, self._rep_usage(self.t1))
+
+    def test_cart_items_중복_없을때_rep_cart로_이전됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1)
+        cart2 = self._cart(u2)
+        self._cart_item(cart1, self.menu1, quantity=1)
+        self._cart_item(cart2, self.menu2, quantity=2)
+        self._call([self.t1, self.t2])
+        self.assertEqual(cart1.items.count(), 2)
+
+    def test_cart_items_동일_메뉴_수량_합산됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1)
+        cart2 = self._cart(u2)
+        self._cart_item(cart1, self.menu1, quantity=1)
+        self._cart_item(cart2, self.menu1, quantity=3)
+        self._call([self.t1, self.t2])
+        item = cart1.items.get(menu=self.menu1)
+        self.assertEqual(item.quantity, 4)
+        self.assertEqual(cart1.items.count(), 1)
+
+    def test_cart_price_합산됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, cart_price=3000)
+        cart2 = self._cart(u2, cart_price=7000)
+        self._call([self.t1, self.t2])
+        cart1.refresh_from_db()
+        self.assertEqual(cart1.cart_price, 10000)
+
+    def test_other_cart_삭제됨(self):
+        from cart.models import Cart
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1)
+        self._cart(u2)
+        self._call([self.t1, self.t2])
+        self.assertEqual(Cart.objects.count(), 1)
+
+    def test_cart_item_개수_손실_없음(self):
+        from cart.models import CartItem
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1)
+        cart2 = self._cart(u2)
+        self._cart_item(cart1, self.menu1, quantity=1)
+        self._cart_item(cart2, self.menu2, quantity=2)  # 다른 메뉴 → 이전
+        self._call([self.t1, self.t2])
+        self.assertEqual(CartItem.objects.filter(cart=cart1).count(), 2)
+
+    # ─── CartCouponApply ──────────────────────────────────────────────────
+
+    def test_과거_라운드_쿠폰_rep_cart로_이전됨(self):
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=2)  # round 0, 1은 과거
+        self._cart_coupon_apply(cart2, round=0, code=self._coupon_code())
+        self._cart_coupon_apply(cart2, round=1, code=self._coupon_code())
+        self._call([self.t1, self.t2])
+        self.assertEqual(CartCouponApply.objects.filter(cart=cart1).count(), 2)
+
+    def test_과거_라운드_쿠폰_이전_후_other_cart_레코드_없음(self):
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=2)
+        code_a = self._coupon_code()
+        self._cart_coupon_apply(cart2, round=0, code=code_a)
+        self._call([self.t1, self.t2])
+        # cart2는 삭제됐으므로 code_a의 CartCouponApply는 cart1로 이전
+        self.assertEqual(CartCouponApply.objects.filter(coupon_code=code_a).count(), 1)
+        self.assertEqual(CartCouponApply.objects.get(coupon_code=code_a).cart.table_usage.table, self.t1)
+
+    def test_pending_쿠폰_CartCouponApply_삭제됨(self):
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=1)  # round 1이 현재 (pending)
+        code_past = self._coupon_code()
+        code_pending = self._coupon_code()
+        self._cart_coupon_apply(cart2, round=0, code=code_past)     # 과거
+        self._cart_coupon_apply(cart2, round=1, code=code_pending)  # pending
+        self._call([self.t1, self.t2])
+        self.assertFalse(CartCouponApply.objects.filter(coupon_code=code_pending).exists())
+
+    def test_pending_쿠폰_code_used_at_None_유지됨(self):
+        """삭제된 pending 쿠폰의 CouponCode.used_at은 None → 재사용 가능"""
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1)
+        cart2 = self._cart(u2, round=0)
+        code = self._coupon_code()
+        self._cart_coupon_apply(cart2, round=0, code=code)
+        self._call([self.t1, self.t2])
+        code.refresh_from_db()
+        self.assertIsNone(code.used_at)
+
+    def test_rep_cart_round_마이그레이션_후_충돌_없음(self):
+        """이전된 쿠폰의 round가 rep_cart.round를 초과하면 rep_cart.round가 업데이트됨"""
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=2)  # historical: round 0, 1
+        self._cart_coupon_apply(cart2, round=0, code=self._coupon_code())
+        self._cart_coupon_apply(cart2, round=1, code=self._coupon_code())
+        self._call([self.t1, self.t2])
+        cart1.refresh_from_db()
+        # round_offset = 0 (rep_cart.round) + 2 historical = 2
+        self.assertEqual(cart1.round, 2)
+        # 다음 주문 round += 1 → 3, round 3에 CartCouponApply 없음
+        self.assertFalse(CartCouponApply.objects.filter(cart=cart1, round=3).exists())
+
+    def test_rep_cart_pending_쿠폰_유지됨(self):
+        """rep_cart의 pending 쿠폰은 other_cart 이전에 의해 영향받지 않음"""
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=0)  # other cart, 쿠폰 없음
+        code_rep = self._coupon_code()
+        self._cart_coupon_apply(cart1, round=0, code=code_rep)  # rep_cart pending
+        self._call([self.t1, self.t2])
+        # rep_cart의 pending 쿠폰이 살아있음
+        self.assertTrue(CartCouponApply.objects.filter(cart=cart1, coupon_code=code_rep).exists())
+
+    # ─── TableCoupon ──────────────────────────────────────────────────────
+
+    def test_rep_usage_쿠폰_없을때_other에서_재할당됨(self):
+        from coupon.models import TableCoupon
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._table_coupon(u2)
+        self._call([self.t1, self.t2])
+        self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
+        self.assertEqual(TableCoupon.objects.count(), 1)
+
+    def test_rep_usage_쿠폰_있을때_other_쿠폰_삭제됨(self):
+        from coupon.models import TableCoupon, Coupon
+        coupon2 = Coupon.objects.create(
+            booth=self.booth, name='5000원 할인', discount_type='AMOUNT', discount_value=5000
+        )
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._table_coupon(u1)
+        TableCoupon.objects.create(coupon=coupon2, table_usage=u2)
+        self._call([self.t1, self.t2])
+        self.assertEqual(TableCoupon.objects.count(), 1)
+        self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
+
+    def test_여러_other_쿠폰_중_하나만_rep_usage로_재할당됨(self):
+        from coupon.models import TableCoupon, Coupon
+        coupon2 = Coupon.objects.create(
+            booth=self.booth, name='2000원 할인', discount_type='AMOUNT', discount_value=2000
+        )
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        u3 = self._usage(self.t3)
+        TableCoupon.objects.create(coupon=self.coupon, table_usage=u2)
+        TableCoupon.objects.create(coupon=coupon2, table_usage=u3)
+        self._call([self.t1, self.t2, self.t3])
+        self.assertEqual(TableCoupon.objects.count(), 1)
+        self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
