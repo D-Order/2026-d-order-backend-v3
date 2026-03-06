@@ -1,6 +1,5 @@
 import logging
 from django.db import models, transaction
-from django.db.models import Sum
 from django.utils import timezone
 from .models import Order, OrderItem
 from table.models import TableUsage
@@ -334,15 +333,9 @@ class OrderService:
         table_usage.accumulated_amount -= refund_amount
         table_usage.save(update_fields=["accumulated_amount"])
 
-        # 11) 새 총매출 계산
-        new_total_sales = (
-            Order.objects
-            .filter(
-                order_status__in=["PAID", "COMPLETED"],
-                table_usage__table__booth_id=booth_id,
-            )
-            .aggregate(total=Sum("order_price"))["total"]
-        ) or 0
+        # 11) 오늘 매출 캐시 감소 (DB 쿼리 대체)
+        from order.cache import update_today_revenue
+        new_total_sales = update_today_revenue(booth_id, -refund_amount)
 
         new_item_total_price = item.fixed_price * remaining_quantity
 
@@ -375,10 +368,10 @@ class OrderService:
                 }
             )
 
-            # 총매출 갱신
+            # 오늘 매출 갱신 이벤트 (계산된 값 포함)
             async_to_sync(channel_layer.group_send)(
                 group_name,
-                {"type": "total_sales_update", "data": {}}
+                {"type": "total_sales_update", "data": {"today_revenue": new_total_sales}}
             )
         except Exception as e:
             logger.error(f"[OrderItem 취소] WebSocket 전송 실패: {e}")
@@ -703,8 +696,11 @@ class OrderService:
         try:
             from channels.layers import get_channel_layer
             from asgiref.sync import async_to_sync
+            from order.cache import update_today_revenue
 
             booth_id = table_usage.table.booth_id
+            today_revenue = update_today_revenue(booth_id, order.order_price)
+
             group_name = f"booth_{booth_id}.order"
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
@@ -721,10 +717,10 @@ class OrderService:
                     }
                 }
             )
-            # 총매출 갱신 이벤트
+            # 오늘 매출 갱신 이벤트 (계산된 값 포함 → Consumer DB 쿼리 불필요)
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
-                {"type": "total_sales_update", "data": {}}
+                {"type": "total_sales_update", "data": {"today_revenue": today_revenue}}
             )
         except Exception as ws_err:
             logger.error(f"[Order] WebSocket 전송 실패 (주문은 정상 생성됨): {ws_err}")
