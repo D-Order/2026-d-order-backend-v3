@@ -359,57 +359,48 @@ class TableService:
         if len(table_nums) < 2:
             raise ValidationError('병합하려면 최소 2개의 테이블이 필요합니다.')
 
-        # 2. 요청된 테이블 조회 (그룹 정보 포함)
-        requested_tables = Table.objects.select_related('group').filter(
-            booth=booth,
-            table_num__in=table_nums
+        # 2. 요청된 테이블 조회 - list()로 한 번만 평가 (중복 쿼리 방지)
+        requested_tables = list(
+            Table.objects.select_related('group').filter(
+                booth=booth,
+                table_num__in=table_nums
+            )
         )
 
-        # 3. 존재하지 않는 테이블 확인
-        requested_count = requested_tables.count()
-        if requested_count != len(table_nums):
-            found_nums = set(requested_tables.values_list('table_num', flat=True))
-            missing_nums = set(table_nums) - found_nums
-            raise NotFound(f'테이블을 찾을 수 없습니다: {sorted(missing_nums)}')
+        # 3. 존재하지 않는 테이블 확인 (Python에서 처리, 추가 쿼리 없음)
+        if len(requested_tables) != len(table_nums):
+            found_nums = {t.table_num for t in requested_tables}
+            raise NotFound(f'테이블을 찾을 수 없습니다: {sorted(set(table_nums) - found_nums)}')
 
-        if requested_tables.filter(status=Table.Status.INACTIVE):
+        # 4. INACTIVE 테이블 확인 (Python에서 처리, 추가 쿼리 없음)
+        if any(t.status == Table.Status.INACTIVE for t in requested_tables):
             raise ValidationError("비활성화 된 테이블은 병합할 수 없어요.")
 
-        # 4. 관련된 모든 그룹 수집
-        groups_to_merge = set()
-        for table in requested_tables:
-            if table.group:
-                groups_to_merge.add(table.group.pk)
+        # 5. 관련된 모든 그룹 수집 (Python에서 처리, 추가 쿼리 없음)
+        groups_to_merge = {t.group_id for t in requested_tables if t.group_id}
 
-        # 5. 병합할 모든 테이블 수집 (그룹에 속한 모든 멤버 포함)
+        # 6. 병합할 모든 테이블 수집 - list()로 한 번만 평가
         if groups_to_merge:
-            # 그룹에 속한 모든 테이블 + 요청된 개별 테이블
-            all_tables = Table.objects.filter(
-                booth=booth
-            ).filter(
-                Q(group_id__in=groups_to_merge) | Q(table_num__in=table_nums)
+            all_tables = list(
+                Table.objects.filter(
+                    booth=booth
+                ).filter(
+                    Q(group_id__in=groups_to_merge) | Q(table_num__in=table_nums)
+                )
             )
         else:
-            # 모두 개별 테이블
             all_tables = requested_tables
 
-        # 6. 가장 낮은 번호의 테이블을 대표로 선택
-        representative_table = all_tables.order_by('table_num').first()
+        # 7. Python에서 count, nums, 대표 테이블 한꺼번에 계산 (추가 쿼리 없음)
+        all_tables_count = len(all_tables)
+        merged_table_nums = [t.table_num for t in all_tables]
+        representative_table = min(all_tables, key=lambda t: t.table_num)
 
-        # 9. 새 그룹 생성
+        # 8. 새 그룹 생성 후 일괄 업데이트
         table_group = TableGroup.objects.create(representative_table=representative_table)
+        Table.objects.filter(booth=booth, table_num__in=merged_table_nums).update(group=table_group)
 
-        # XXX : django Lazy Loading 관련
-        # 아래 로직이 실행되면 기존 그룹이 다 해제됨
-        # DJango의 Lazy Loading으로 return시에 합치기 전 그룹 정보로 접근하면 갯수가 안 맞게됨
-        # 미리 그룹 갯수 받아서 return하는거로 해결~ 
-        # TODO : 여기 최적화하기 (병합 로직이 복잡함.)
-        all_tables_count = all_tables.count()
-        merged_table_nums = list(all_tables.values_list('table_num', flat=True))
-
-        all_tables.update(group=table_group)
-
-        # 8. 기존 그룹 삭제
+        # 9. 기존 그룹 삭제
         if groups_to_merge:
             TableGroup.objects.filter(pk__in=groups_to_merge).delete()
 
