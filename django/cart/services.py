@@ -9,7 +9,6 @@ from table.models import *
 from menu.models import *
 from order.models import *
 from .models import *
-from .services_ws import *
 
 PENDING_TTL_MINUTES = 3
 
@@ -456,6 +455,8 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
     
     final_table_usage_id = cart.table_usage_id
 
+    from .services_ws import broadcast_cart_event
+    
     transaction.on_commit(
         lambda: broadcast_cart_event(
             table_usage_id=final_table_usage_id,
