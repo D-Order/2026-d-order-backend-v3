@@ -8,6 +8,7 @@ from booth.models import *
 from .serializers import *
 from .services import *
 from .models import *
+from cart.services_ws import broadcast_cart_event
 
 
 def error_response(e: CouponError):
@@ -183,6 +184,8 @@ class CouponApplyAPIView(APIView):
         serializer = CouponApplySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        table_usage_id = serializer.validated_data["table_usage_id"]
+        
         try:
             result = apply_coupon_code(
                 table_usage_id=serializer.validated_data["table_usage_id"],
@@ -190,6 +193,12 @@ class CouponApplyAPIView(APIView):
             )
         except CouponError as e:
             return Response({"message": e.message, "data": {"error_code": e.error_code, "detail": e.detail}}, status=e.status_code)
+        
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_COUPON_APPLIED",
+            message="쿠폰이 적용되었습니다.",
+        )
 
         return Response({"message": "쿠폰이 적용되었습니다", "data": result}, status=200)
 
@@ -197,9 +206,17 @@ class CouponApplyAPIView(APIView):
         serializer = CouponCancelSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        table_usage_id = serializer.validated_data["table_usage_id"]
+        
         try:
             result = cancel_coupon_apply(table_usage_id=serializer.validated_data["table_usage_id"])
         except CouponError as e:
             return Response({"message": e.message, "data": {"error_code": e.error_code, "detail": e.detail}}, status=e.status_code)
 
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_COUPON_CANCELLED",
+            message="쿠폰 적용이 취소되었습니다.",
+        )
+        
         return Response({"message": "쿠폰 적용이 취소되었습니다", "data": result}, status=200)
