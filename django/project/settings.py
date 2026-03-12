@@ -225,9 +225,9 @@ SIMPLE_JWT = {
     # 쿠키 기반 인증 설정
     'AUTH_COOKIE': 'access_token',
     'AUTH_COOKIE_REFRESH': 'refresh_token',
-    'AUTH_COOKIE_SECURE': IS_PRODUCTION,  # 프로덕션에서만 HTTPS 강제
+    'AUTH_COOKIE_SECURE': not IS_LOCAL,  # local 제외 HTTPS 환경에서 Secure
     'AUTH_COOKIE_HTTP_ONLY': True,
-    'AUTH_COOKIE_SAMESITE': 'Lax',
+    'AUTH_COOKIE_SAMESITE': 'None' if not IS_LOCAL else 'Lax',  # cross-origin 쿠키 전송 허용
 }
 
 # Logging 설정
