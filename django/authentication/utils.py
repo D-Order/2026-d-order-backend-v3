@@ -53,7 +53,9 @@ def delete_jwt_cookies(response):
     """
     jwt_settings = settings.SIMPLE_JWT
 
-    response.delete_cookie(jwt_settings.get('AUTH_COOKIE'))
-    response.delete_cookie(jwt_settings.get('AUTH_COOKIE_REFRESH'))
+    samesite = jwt_settings.get('AUTH_COOKIE_SAMESITE')
+
+    response.delete_cookie(jwt_settings.get('AUTH_COOKIE'), samesite=samesite)
+    response.delete_cookie(jwt_settings.get('AUTH_COOKIE_REFRESH'), samesite=samesite)
 
     return response
