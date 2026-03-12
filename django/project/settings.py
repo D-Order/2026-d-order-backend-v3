@@ -374,9 +374,9 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # 쿠키 보안 설정
 CSRF_COOKIE_NAME = 'csrftoken'              # 쿠키 이름
-CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=IS_PRODUCTION)
+CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=not IS_LOCAL)
 CSRF_COOKIE_HTTPONLY = False                # JavaScript에서 접근 가능 (React에서 필요)
-CSRF_COOKIE_SAMESITE = 'Lax'                # CSRF 공격 방지
+CSRF_COOKIE_SAMESITE = 'None' if not IS_LOCAL else 'Lax'
 
 SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
 SESSION_COOKIE_HTTPONLY = env.bool('SESSION_COOKIE_HTTPONLY', default=True)
