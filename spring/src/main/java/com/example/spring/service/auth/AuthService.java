@@ -1,6 +1,7 @@
 package com.example.spring.service.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.example.spring.config.DjangoApiUtil;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -43,33 +44,7 @@ private final ObjectMapper objectMapper;
         }
     }
 
-    /**
-     * CSRF 토큰 발급 (Django API 호출)
-     * @return CSRF 토큰 정보 (csrfToken, csrfCookie)
-     */
-    private Map<String, String> getCsrfToken() {
-        String url = djangoApiBaseUrl + "/api/v3/django/auth/csrf-token/";
-        try {
-            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, null, Map.class);
-            Map<String, String> result = new HashMap<>();
-            Map body = response.getBody();
-            if (body != null && body.get("csrfToken") != null) {
-                result.put("csrfToken", body.get("csrfToken").toString());
-            }
-            List<String> cookies = response.getHeaders().get(HttpHeaders.SET_COOKIE);
-            if (cookies != null) {
-                for (String cookie : cookies) {
-                    if (cookie.startsWith("csrftoken=")) {
-                        result.put("csrfCookie", cookie.split(";")[0]);
-                    }
-                }
-            }
-            return result;
-        } catch (Exception e) {
-            log.error("CSRF 토큰 발급 실패: {}", e.getMessage());
-            return new HashMap<>();
-        }
-    }
+    // ...existing code...
 
     /**
      * 로그인 처리 (Django API 호출)
@@ -80,7 +55,7 @@ private final ObjectMapper objectMapper;
      */
     public Map<String, Object> login(String username, String password, HttpServletResponse response) {
         String url = djangoApiBaseUrl + "/api/v3/django/auth/";
-        Map<String, String> csrfData = getCsrfToken();
+        Map<String, String> csrfData = DjangoApiUtil.getCsrfToken(restTemplate, djangoApiBaseUrl);
         Map<String, String> requestBody = new HashMap<>();
         requestBody.put("username", username);
         requestBody.put("password", password);
@@ -122,7 +97,7 @@ private final ObjectMapper objectMapper;
      */
     public Map<String, Object> refreshToken(String accessToken, String refreshToken, HttpServletResponse response) {
         String url = djangoApiBaseUrl + "/api/v3/django/auth/refresh/";
-        Map<String, String> csrfData = getCsrfToken();
+        Map<String, String> csrfData = DjangoApiUtil.getCsrfToken(restTemplate, djangoApiBaseUrl);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
