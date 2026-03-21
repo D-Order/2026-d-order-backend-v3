@@ -5,7 +5,6 @@ from .models import *
 
 
 class CouponCreateSerializer(serializers.Serializer):
-    booth_id = serializers.IntegerField()
     name = serializers.CharField(max_length=50, allow_blank=False)
     description = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True)
     discount_type = serializers.ChoiceField(choices=["RATE", "AMOUNT"])
