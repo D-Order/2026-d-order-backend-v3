@@ -98,11 +98,6 @@ class CartDetailAPIView(APIView):
 
         cart = get_or_create_cart_by_table_usage(query_serializer.validated_data["table_usage_id"])
 
-        if cart.is_pending_expired():
-            cart.status = Cart.Status.ACTIVE
-            cart.pending_expires_at = None
-            cart.save(update_fields=["status", "pending_expires_at"])
-
         recalc_cart_price(cart)
 
         items = []

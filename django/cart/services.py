@@ -1,6 +1,6 @@
 from datetime import timedelta
 from django.db import transaction
-from django.db.models import F, Sum, Case, When, IntegerField
+from django.db.models import F, Sum, Case, When, IntegerField, OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -35,7 +35,6 @@ def add_to_cart(*, table_usage_id: int, type: str, quantity: int, menu_id: int =
             menu=menu,
             setmenu=None,
             defaults={
-                "type": "menu",
                 "quantity": quantity,
                 "price_at_cart": menu.price,
             },
@@ -60,7 +59,6 @@ def add_to_cart(*, table_usage_id: int, type: str, quantity: int, menu_id: int =
             menu=None,
             setmenu=setmenu,
             defaults={
-                "type": "setmenu",
                 "quantity": quantity,
                 "price_at_cart": setmenu.price,
             },
@@ -175,11 +173,13 @@ def enter_payment_info(*, table_usage_id: int):
     cart.pending_expires_at = timezone.now() + timedelta(minutes=PENDING_TTL_MINUTES)
     cart.save(update_fields=["status", "pending_expires_at"])
 
+    booth = cart.table_usage.table.booth
+
     payment = {
-        "subtotal": subtotal,
-        "discount_total": discount_total,
-        "total": total,
-        "expires_at": cart.pending_expires_at,
+        "depositor": booth.depositor,
+        "bank_name": booth.bank,
+        "account": booth.account,
+        "amount": total,
     }
 
     return cart, payment
@@ -207,11 +207,18 @@ def _restore_if_pending_expired(cart: Cart):
 
 
 def _sync_item_prices_to_latest(cart: Cart) -> None:
+    menu_price_subquery = Subquery(
+        Menu.objects.filter(pk=OuterRef("menu_id")).values("price")[:1]
+    )
+    setmenu_price_subquery = Subquery(
+        SetMenu.objects.filter(pk=OuterRef("setmenu_id")).values("price")[:1]
+    )
+
     qs = CartItem.objects.select_for_update().filter(cart=cart)
     qs.update(
         price_at_cart=Case(
-            When(menu__isnull=False, then=F("menu__price")),
-            When(setmenu__isnull=False, then=F("setmenu__price")),
+            When(menu__isnull=False, then=menu_price_subquery),
+            When(setmenu__isnull=False, then=setmenu_price_subquery),
             default=F("price_at_cart"),
             output_field=IntegerField(),
         )
