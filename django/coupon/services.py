@@ -5,6 +5,9 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
 
 from booth.models import *
 from table.models import *
@@ -177,3 +180,60 @@ def cancel_coupon_apply(*, table_usage_id: int):
         "summary": {"subtotal": subtotal, "discount_total": 0, "total": subtotal},
         "round": cart.round,
     }
+    
+def build_coupon_excel_for_booth(*, booth: Booth) -> bytes:
+    coupons = (
+        Coupon.objects.filter(booth=booth)
+        .prefetch_related("codes")
+        .order_by("-created_at", "id")
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "쿠폰 목록"
+
+    ws.append([
+        "쿠폰 이름",
+        "쿠폰 내용",
+        "할인 타입",
+        "할인 값",
+        "쿠폰 재고",
+        "코드",
+        "사용 여부",
+    ])
+
+    for coupon in coupons:
+        codes = coupon.codes.all().order_by("created_at")
+
+        # 코드가 없는 쿠폰도 한 줄은 보이게 바꿈
+        if not codes.exists():
+            ws.append([
+                coupon.name,
+                coupon.description or "",
+                coupon.get_discount_type_display(),
+                float(coupon.discount_value),
+                coupon.quantity,
+                "",
+                "미사용",
+            ])
+            continue
+
+        for code in codes:
+            ws.append([
+                coupon.name,
+                coupon.description or "",
+                coupon.get_discount_type_display(),
+                float(coupon.discount_value),
+                coupon.quantity,
+                code.code,
+                "사용" if code.used_at else "미사용",
+            ])
+
+    widths = [20, 30, 15, 12, 12, 18, 12]
+    for idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    return stream.getvalue()

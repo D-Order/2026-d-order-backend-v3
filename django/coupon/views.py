@@ -132,46 +132,31 @@ class CouponDeleteAPIView(APIView):
 class CouponDownloadAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, coupon_id: int):
+    def get(self, request):
         try:
             booth = get_admin_booth(request)
         except CouponError as e:
             return error_response(e)
-        coupon = get_object_or_404(Coupon, id=coupon_id, booth=booth)
-        codes = CouponCode.objects.filter(coupon=coupon).order_by("created_at")
 
-        from openpyxl import Workbook
-        from openpyxl.utils import get_column_letter
-        from io import BytesIO
         from django.utils import timezone
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "coupon_codes"
-
-        ws.append(["coupon_id", "coupon_name", "code", "used", "used_at", "created_at"])
-        for code in codes:
-            ws.append(
-                [
-                    coupon.id,
-                    coupon.name,
-                    code.code,
-                    bool(code.used_at),
-                    code.used_at.isoformat() if code.used_at else None,
-                    code.created_at.isoformat() if code.created_at else None,
-                ]
+        try:
+            file_bytes = build_coupon_excel_for_booth(booth=booth)
+        except Exception as e:
+            return Response(
+                {
+                    "message": "쿠폰 엑셀 다운로드 중 오류가 발생했습니다.",
+                    "data": {
+                        "error_code": "COUPON_DOWNLOAD_FAILED",
+                        "detail": str(e),
+                    },
+                },
+                status=500,
             )
 
-        for col in range(1, 7):
-            ws.column_dimensions[get_column_letter(col)].width = 22
-
-        stream = BytesIO()
-        wb.save(stream)
-        stream.seek(0)
-
-        filename = f"booth_{coupon.booth_id}_coupon_{coupon.id}_codes_{timezone.now().strftime('%Y%m%d')}.xlsx"
+        filename = f"booth_{booth.pk}_coupon_codes_{timezone.now().strftime('%Y%m%d')}.xlsx"
         resp = HttpResponse(
-            stream.getvalue(),
+            file_bytes,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
