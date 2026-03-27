@@ -1,7 +1,9 @@
 package com.example.spring.controller.table;
 
+import com.example.spring.config.CookieUtil;
 import com.example.spring.dto.table.request.TableResetRequest;
 import com.example.spring.service.table.TableService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class TableController {
 
     private final TableService tableService;
+    private final CookieUtil cookieUtil;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
@@ -32,9 +35,11 @@ public class TableController {
      * POST /api/v3/spring/table/reset
      */
     @PostMapping("/reset")
-    public ResponseEntity<Map<String, Object>> resetTables(@RequestBody TableResetRequest request, HttpServletResponse response) {
+    public ResponseEntity<Map<String, Object>> resetTables(@RequestBody TableResetRequest request, HttpServletRequest httpRequest, HttpServletResponse response) {
+        String accessToken = cookieUtil.getAccessTokenFromCookies(httpRequest.getCookies());
+        String refreshToken = cookieUtil.getRefreshTokenFromCookies(httpRequest.getCookies());
         try {
-            Map<String, Object> result = tableService.resetTables(request.getTable_nums(), response);
+            Map<String, Object> result = tableService.resetTables(request.getTable_nums(), accessToken, refreshToken, response);
             return ResponseEntity.ok(result);
         } catch (TableService.DjangoApiException e) {
             return handleDjangoError(e);
