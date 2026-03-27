@@ -97,6 +97,7 @@ Content-Type: application/json
 
 - **설명**: 오류 발생 시 서버로부터 받는 에러 메시지 및 상세 정보및 응답데이터 JSON 예시
 - **기입 내용**:
+
   ```json
 
   ```

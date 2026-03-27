@@ -48,7 +48,7 @@ public class TableService {
      * @param response HttpServletResponse (쿠키 설정용)
      * @return Django 응답 데이터
      */
-    public Map<String, Object> resetTables(List<Integer> tableNums, HttpServletResponse response) {
+    public Map<String, Object> resetTables(List<Integer> tableNums, String accessToken, String refreshToken, HttpServletResponse response) {
         String url = djangoApiBaseUrl + "/api/v3/django/booth/tables/reset/";
         Map<String, String> csrfData = DjangoApiUtil.getCsrfToken(restTemplate, djangoApiBaseUrl);
         Map<String, Object> requestBody = new HashMap<>();
@@ -64,7 +64,13 @@ public class TableService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         if (csrfData.get("csrfToken") != null) headers.set("X-CSRFToken", csrfData.get("csrfToken"));
-        if (csrfData.get("csrfCookie") != null) headers.set(HttpHeaders.COOKIE, csrfData.get("csrfCookie"));
+
+        // 프론트엔드 요청 쿠키에서 추출한 JWT 토큰을 Django로 전달
+        StringBuilder cookieBuilder = new StringBuilder();
+        if (csrfData.get("csrfCookie") != null) cookieBuilder.append(csrfData.get("csrfCookie"));
+        if (accessToken != null) cookieBuilder.append("; access_token=").append(accessToken);
+        if (refreshToken != null) cookieBuilder.append("; refresh_token=").append(refreshToken);
+        if (cookieBuilder.length() > 0) headers.set(HttpHeaders.COOKIE, cookieBuilder.toString());
 
         try {
             ResponseEntity<Map<String, Object>> djangoResponse = restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(jsonBody, headers), (Class<Map<String, Object>>) (Class<?>) Map.class);
