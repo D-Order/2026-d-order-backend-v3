@@ -515,6 +515,10 @@ class TableService:
         all_table_ids = [t.id for t in all_tables]
         TableService._merge_active_usages(all_table_ids, representative_table)
 
+        # 8-1. 활성 세션이 있으면 모든 병합 테이블 IN_USE로 업데이트
+        if TableUsage.objects.filter(table=representative_table, ended_at__isnull=True).exists():
+            Table.objects.filter(pk__in=all_table_ids).update(status=Table.Status.IN_USE)
+
         # 9. 새 그룹 생성 후 일괄 업데이트
         table_group = TableGroup.objects.create(representative_table=representative_table)
         Table.objects.filter(booth=booth, table_num__in=merged_table_nums).update(group=table_group)
