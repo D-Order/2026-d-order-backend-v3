@@ -199,7 +199,9 @@ class TableService:
             raise ValidationError('테이블 번호는 필수입니다.')
 
         # 테이블 조회
-        table = Table.objects.filter(booth=booth, table_num=table_num).first()
+        table = Table.objects.select_related('group__representative_table').filter(
+            booth=booth, table_num=table_num
+        ).first()
         if not table:
             raise NotFound('해당 테이블을 찾을 수 없습니다.')
 
@@ -207,15 +209,21 @@ class TableService:
         if table.status == Table.Status.INACTIVE:
             raise ValidationError('해당 테이블은 현재 이용할 수 없습니다.')
 
-        # 이미 사용 중인 경우 기존 세션 반환
+        # 병합된 테이블이면 대표 테이블 기준으로 처리
+        representative_table = table.group.representative_table if table.group else table
+
+        # 이미 사용 중인 경우 대표 테이블의 기존 세션 반환
         if table.status == Table.Status.IN_USE:
-            table_usage = TableUsage.objects.filter(table=table, ended_at__isnull=True).first()
+            table_usage = TableUsage.objects.filter(table=representative_table, ended_at__isnull=True).first()
             return table_usage
 
-        # 테이블 입장 처리
-        table_usage = TableService.create_table_usage(table)
-        table.status = Table.Status.IN_USE
-        table.save()
+        # 테이블 입장 처리: 대표 테이블에 세션 생성, 그룹 전체 IN_USE
+        table_usage = TableService.create_table_usage(representative_table)
+        if table.group:
+            Table.objects.filter(group=table.group).update(status=Table.Status.IN_USE)
+        else:
+            table.status = Table.Status.IN_USE
+            table.save()
 
         TableService._broadcast(booth.pk, {
             'type': 'enter_table',
