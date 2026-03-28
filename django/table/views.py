@@ -58,6 +58,7 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         )
         order_items = [
             {
+                'id' : item.id,
                 'name': item.setmenu.name if item.setmenu_id else (item.menu.name if item.menu else '알 수 없음'),
                 'quantity': item.quantity,
                 'fixed_price': item.fixed_price,
