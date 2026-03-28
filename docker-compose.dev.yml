@@ -129,6 +129,7 @@ services:
         condition: service_healthy
     volumes:
       - static_volume_dev:/app/static
+      - ./logs/django:/app/logs
     networks:
       - d-order-network-dev
     restart: unless-stopped
