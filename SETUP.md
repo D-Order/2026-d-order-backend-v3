@@ -402,3 +402,39 @@ docker-compose -f docker-compose.local_env.yml down -v # -v 옵션이 붙으면 
 ```
 
 ---
+
+# 🖥️ Dev 서버 배포
+
+## 최초 배포 시 로그 디렉토리 권한 설정
+
+bind mount 방식으로 로그를 저장하기 때문에 **최초 1회** 호스트에서 권한 설정이 필요합니다.
+설정하지 않으면 Django 컨테이너가 Permission denied로 재시작 루프에 빠집니다.
+
+```bash
+sudo chmod 777 ~/d-order/logs/django
+docker-compose -f docker-compose.dev.yml restart django
+```
+
+## 로그 확인
+
+```bash
+# 실시간 일반 로그
+tail -f ~/d-order/logs/django/django.log
+
+# 실시간 에러 로그
+tail -f ~/d-order/logs/django/error.log
+
+# Docker 콘솔 로그
+docker-compose -f docker-compose.dev.yml logs -f django
+```
+
+## 로그 구조
+
+| 파일 | 내용 | 최대 크기 |
+|------|------|----------|
+| `django.log` | INFO 이상 전체 로그 | 60MB (10MB × 6) |
+| `error.log` | ERROR 이상만 | 20MB (5MB × 4) |
+
+RotatingFileHandler가 자동으로 파일을 교체하므로 수동 관리 불필요합니다.
+
+---
