@@ -52,7 +52,7 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         items = (
             OrderItem.objects
             .filter(order__table_usage=usage, parent__isnull=True)
-            .exclude(order__order_status='CANCELLED')
+            .exclude(status='CANCELLED')
             .select_related('menu', 'setmenu')
             .order_by('-id')
         )
