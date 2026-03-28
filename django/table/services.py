@@ -423,6 +423,11 @@ class TableService:
                     rep_cart.round = round_offset
                     rep_cart.save(update_fields=['round'])
 
+            # Order.cart를 rep_cart로 업데이트 (PROTECT FK로 인한 삭제 실패 방지)
+            other_cart_ids = [c.id for c in other_carts]
+            if rep_cart and other_cart_ids:
+                Order.objects.filter(cart_id__in=other_cart_ids).update(cart=rep_cart)
+
             # 나머지 other_usage_ids의 cart 삭제 (CartItem CASCADE, CartCouponApply는 이미 이전됨)
             Cart.objects.filter(table_usage_id__in=other_usage_ids).delete()
 
