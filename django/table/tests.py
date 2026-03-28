@@ -1164,3 +1164,25 @@ class MergeActiveUsagesTestCase(TestCase):
         self._call([self.t1, self.t2, self.t3])
         self.assertEqual(TableCoupon.objects.count(), 1)
         self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
+
+    # ─── 회귀 테스트 ──────────────────────────────────────────────────────
+
+    def test_paid_order_있는_테이블_병합시_ProtectedError_없음(self):
+        """PAID 주문이 있는 테이블 병합 시 ProtectedError 없이 성공해야 함"""
+        from cart.models import Cart
+        self._usage(self.t1, minutes_ago=30)
+        usage2 = self._usage(self.t2, minutes_ago=20)
+        other_cart = Cart.objects.create(table_usage=usage2, cart_price=5000)
+        order = Order.objects.create(
+            table_usage=usage2,
+            cart=other_cart,
+            order_price=5000,
+            original_price=5000,
+            order_status='PAID',
+        )
+
+        self._call([self.t1, self.t2])
+
+        order.refresh_from_db()
+        rep_cart = Cart.objects.get(table_usage=self._rep_usage(self.t1))
+        self.assertEqual(order.cart, rep_cart)
