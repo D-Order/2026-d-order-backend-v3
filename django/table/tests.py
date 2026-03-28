@@ -252,7 +252,7 @@ class TableRetrieveTestCase(APITestCase):
         self.assertEqual(len(order_items), 2)
 
     def test_retrieve_order_item_fields(self):
-        """order_items 각 항목에 name, quantity, fixed_price, created_at 포함"""
+        """order_items 각 항목에 id, name, quantity, fixed_price, created_at 포함"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='아메리카노', price=4000, quantity=2)
@@ -260,6 +260,8 @@ class TableRetrieveTestCase(APITestCase):
         response = self.client.get(self._detail_url(1))
         item = response.data['data']['order_items'][0]
 
+        self.assertIn('id', item)
+        self.assertIsNotNone(item['id'])
         self.assertEqual(item['name'], '아메리카노')
         self.assertEqual(item['quantity'], 2)
         self.assertEqual(item['fixed_price'], 4000)

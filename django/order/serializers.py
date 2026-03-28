@@ -100,6 +100,7 @@ class TableOrderHistoryResponseSerializer(serializers.Serializer):
 
 class AdminOrderItemSerializer(serializers.Serializer):
     """주문 내역 – 어드민용 아이템 (이름, 수량, 가격, 생성시각)"""
+    id = serializers.IntegerField()
     name = serializers.CharField()
     quantity = serializers.IntegerField()
     fixed_price = serializers.IntegerField()
