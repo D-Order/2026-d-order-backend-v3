@@ -1,0 +1,32 @@
+# Git Line Ending Configuration
+# 윈도우 환경에서도 올바른 라인 엔딩을 유지하기 위한 설정
+
+# Shell scripts must always use LF (Linux line endings)
+*.sh text eol=lf
+
+# Docker and Docker Compose files
+docker-compose*.yml text eol=lf
+Dockerfile* text eol=lf
+
+# Environment files
+.env* text eol=lf
+
+# Python files
+*.py text eol=lf
+
+# Configuration files
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Markdown and documentation
+*.md text eol=lf
+*.txt text eol=lf
+
+# Ensure binary files are treated as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

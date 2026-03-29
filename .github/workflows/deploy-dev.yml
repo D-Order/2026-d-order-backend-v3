@@ -1,0 +1,243 @@
+# DEV 환경 자동 배포 워크플로우
+# 트리거: DEV 관련 라벨이 붙은 PR이 dev 브랜치에 머지될 때
+#
+# 라벨별 동작:
+#   - DEV: 전체 배포 (Django + Nginx + docker-compose 갱신)
+#   - DEV-DJANGO: Django만 빌드 & 재시작
+#   - DEV-SPRING: Spring만 빌드 & 재시작 (TODO)
+#   - DEV-NGINX: Nginx만 빌드 & 재시작
+
+name: Deploy to DEV
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches:
+      - dev
+
+env:
+  DEPLOY_PATH: /home/ubuntu/d-order
+
+jobs:
+  # 라벨 확인
+  check-labels:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      deploy-all: ${{ contains(github.event.pull_request.labels.*.name, 'DEV') }}
+      deploy-django: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-DJANGO') }}
+      deploy-spring: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-SPRING') }}
+      deploy-nginx: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-NGINX') }}
+    steps:
+      - name: Check labels
+        run: |
+          echo "DEV: ${{ contains(github.event.pull_request.labels.*.name, 'DEV') }}"
+          echo "DEV-DJANGO: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-DJANGO') }}"
+          echo "DEV-SPRING: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-SPRING') }}"
+          echo "DEV-NGINX: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-NGINX') }}"
+
+  # Django 빌드 & 푸시
+  build-django:
+    needs: check-labels
+    if: needs.check-labels.outputs.deploy-all == 'true' || needs.check-labels.outputs.deploy-django == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Django image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./django
+          file: ./django/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/d-order-django:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Nginx 빌드 & 푸시
+  build-nginx:
+    needs: check-labels
+    if: needs.check-labels.outputs.deploy-all == 'true' || needs.check-labels.outputs.deploy-nginx == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Nginx image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./nginx
+          file: ./nginx/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/d-order-nginx:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # TODO: Spring 빌드 & 푸시
+  build-spring:
+    needs: check-labels
+    if: needs.check-labels.outputs.deploy-all == 'true' || needs.check-labels.outputs.deploy-spring == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and push Spring image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./spring
+          file: ./spring/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/d-order-spring:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # EC2 배포
+  deploy:
+    needs: [check-labels, build-django, build-nginx, build-spring]
+
+    # 빌드 job 중 하나라도 실행되었으면 배포 진행 (skipped도 success로 처리)
+    if: |
+      always() &&
+      needs.check-labels.result == 'success' &&
+      (needs.build-django.result == 'success' || needs.build-django.result == 'skipped') &&
+      (needs.build-nginx.result == 'success' || needs.build-nginx.result == 'skipped') &&
+      (needs.build-spring.result == 'success' || needs.build-spring.result == 'skipped') &&
+      (needs.build-django.result == 'success' || needs.build-nginx.result == 'success' || needs.build-spring.result == 'success')
+
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # DEV 라벨일 때만 docker-compose.dev.yml 복사
+      - name: Copy docker-compose to EC2
+        if: needs.check-labels.outputs.deploy-all == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.dev.yml"
+          target: ${{ env.DEPLOY_PATH }}
+
+      # 전체 배포 (DEV 라벨)
+      - name: Deploy ALL services
+        if: needs.check-labels.outputs.deploy-all == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+
+            # 전체 pull & 재시작
+            docker compose -f docker-compose.dev.yml pull -q
+            docker compose -f docker-compose.dev.yml up -d --remove-orphans
+            docker image prune -f
+
+            # 컨테이너 상태 확인
+            sleep 15
+            docker compose -f docker-compose.dev.yml ps
+            docker compose -f docker-compose.dev.yml logs --tail=20
+
+            # Health check (실패해도 일단 진행)
+            curl -f http://localhost/health/django || echo "Health check failed, but continuing..."
+
+      # Django만 배포 (DEV-DJANGO 라벨)
+      - name: Deploy DJANGO only
+        if: needs.check-labels.outputs.deploy-django == 'true' && needs.check-labels.outputs.deploy-all != 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+
+            # Django만 pull & 재시작
+            docker compose -f docker-compose.dev.yml pull -q django
+            docker compose -f docker-compose.dev.yml up -d --no-deps django
+            docker image prune -f
+
+            sleep 5
+            curl -f http://localhost/health/django || exit 1
+
+      # Nginx만 배포 (DEV-NGINX 라벨)
+      - name: Deploy NGINX only
+        if: needs.check-labels.outputs.deploy-nginx == 'true' && needs.check-labels.outputs.deploy-all != 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+
+            echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+
+            # Nginx만 pull & 재시작
+            docker compose -f docker-compose.dev.yml pull -q nginx
+            docker compose -f docker-compose.dev.yml up -d --no-deps nginx
+            docker image prune -f
+
+      # TODO: Spring만 배포 (DEV-SPRING 라벨)
+      - name: Deploy SPRING only
+        if: needs.check-labels.outputs.deploy-spring == 'true' && needs.check-labels.outputs.deploy-all != 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_PATH }}
+            echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+            docker compose -f docker-compose.dev.yml pull spring
+            docker compose -f docker-compose.dev.yml up -d --no-deps spring
+            docker image prune -f
+            sleep 5
+            curl -f http://localhost/health/spring || exit 1
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "배포 완료 - ${{ github.sha }}"
+          echo "DEV: ${{ needs.check-labels.outputs.deploy-all }}"
+          echo "DEV-DJANGO: ${{ needs.check-labels.outputs.deploy-django }}"
+          echo "DEV-NGINX: ${{ needs.check-labels.outputs.deploy-nginx }}"

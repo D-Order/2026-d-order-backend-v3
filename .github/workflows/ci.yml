@@ -1,0 +1,145 @@
+# CI 워크플로우
+# PR 생성/업데이트 시 테스트 및 린트 실행
+# 통과해야 머지 가능
+#
+# 라벨별 동작:
+#   - DEV 또는 DEV-DJANGO: Django 테스트 & 린트
+#   - DEV 또는 DEV-SPRING: Spring 테스트 (TODO)
+
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches:
+      - dev
+      - main
+
+jobs:
+  # 라벨 확인
+  check-labels:
+    runs-on: ubuntu-latest
+    outputs:
+      test-all: ${{ github.event.pull_request.base.ref == 'main' || contains(github.event.pull_request.labels.*.name, 'DEV') }}
+      test-django: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-DJANGO') }}
+      test-spring: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-SPRING') }}
+    steps:
+      - name: Check labels
+        run: |
+          echo "Target branch: ${{ github.event.pull_request.base.ref }}"
+          echo "DEV: ${{ contains(github.event.pull_request.labels.*.name, 'DEV') }}"
+          echo "DEV-DJANGO: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-DJANGO') }}"
+          echo "DEV-SPRING: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-SPRING') }}"
+
+  # Django 테스트
+  test-django:
+    needs: check-labels
+    if: needs.check-labels.outputs.test-all == 'true' || needs.check-labels.outputs.test-django == 'true'
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: d_order_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd django
+          pip install -r requirements.txt
+
+      - name: Run tests
+        env:
+          ENVIRONMENT: local
+          DEBUG: "True"
+          SECRET_KEY: test-secret-key-for-ci
+          DB_ENGINE: django.db.backends.postgresql
+          DB_NAME: d_order_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_PASSWORD: ""
+          ALLOWED_HOSTS_LOCAL: localhost,127.0.0.1
+          CORS_ALLOWED_ORIGINS_LOCAL: http://localhost:3000
+        run: |
+          cd django
+          pytest -v
+
+  # Spring 테스트
+  test-spring:
+    needs: check-labels
+    if: needs.check-labels.outputs.test-all == 'true' || needs.check-labels.outputs.test-spring == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: d_order_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+      - name: Run tests
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/d_order_test
+          SPRING_DATASOURCE_USERNAME: postgres
+          SPRING_DATASOURCE_PASSWORD: postgres
+        run: |
+          cd spring
+          chmod +x gradlew
+          ./gradlew test --no-daemon
