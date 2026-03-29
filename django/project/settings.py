@@ -232,7 +232,8 @@ SIMPLE_JWT = {
     'AUTH_COOKIE_REFRESH': 'refresh_token',
     'AUTH_COOKIE_SECURE': not IS_LOCAL,  # local 제외 HTTPS 환경에서 Secure
     'AUTH_COOKIE_HTTP_ONLY': True,
-    'AUTH_COOKIE_SAMESITE': 'None' if not IS_LOCAL else 'Lax',  # cross-origin 쿠키 전송 허용
+    # 'AUTH_COOKIE_SAMESITE': 'None' if not IS_LOCAL else 'Lax',  # cross-origin 쿠키 전송 허용
+    'AUTH_COOKIE_SAMESITE': 'Lax',  # cross-origin 쿠키 전송 허용
 }
 
 # Logging 설정
@@ -424,7 +425,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 CSRF_COOKIE_NAME = 'csrftoken'              # 쿠키 이름
 CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=not IS_LOCAL)
 CSRF_COOKIE_HTTPONLY = False                # JavaScript에서 접근 가능 (React에서 필요)
-CSRF_COOKIE_SAMESITE = 'None' if not IS_LOCAL else 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
 SESSION_COOKIE_HTTPONLY = env.bool('SESSION_COOKIE_HTTPONLY', default=True)
