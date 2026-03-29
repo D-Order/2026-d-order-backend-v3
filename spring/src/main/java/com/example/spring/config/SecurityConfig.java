@@ -1,5 +1,6 @@
 package com.example.spring.config;
 
+import com.example.spring.security.ServerApiJwtFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,6 +9,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -26,12 +28,15 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
+    private final ServerApiJwtFilter serverApiJwtFilter;
+
     /**
      * Spring Security 필터 체인 설정
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+                .addFilterBefore(serverApiJwtFilter, UsernamePasswordAuthenticationFilter.class)
                 // CSRF 비활성화 (JWT 쿠키 사용)
                 .csrf(AbstractHttpConfigurer::disable)
 
