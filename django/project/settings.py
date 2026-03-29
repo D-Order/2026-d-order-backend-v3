@@ -234,6 +234,7 @@ SIMPLE_JWT = {
     'AUTH_COOKIE_HTTP_ONLY': True,
     # 'AUTH_COOKIE_SAMESITE': 'None' if not IS_LOCAL else 'Lax',  # cross-origin 쿠키 전송 허용
     'AUTH_COOKIE_SAMESITE': 'Lax',  # cross-origin 쿠키 전송 허용
+    'AUTH_COOKIE_DOMAIN': None if IS_LOCAL else '.dorder-api.shop',
 }
 
 # Logging 설정
@@ -426,10 +427,12 @@ CSRF_COOKIE_NAME = 'csrftoken'              # 쿠키 이름
 CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=not IS_LOCAL)
 CSRF_COOKIE_HTTPONLY = False                # JavaScript에서 접근 가능 (React에서 필요)
 CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_DOMAIN = None if IS_LOCAL else '.dorder-api.shop'
 
 SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
 SESSION_COOKIE_HTTPONLY = env.bool('SESSION_COOKIE_HTTPONLY', default=True)
 SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_DOMAIN = None if IS_LOCAL else '.dorder-api.shop'
 
 
 # CSRF 설정
