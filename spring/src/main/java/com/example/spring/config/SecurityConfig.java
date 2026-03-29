@@ -50,6 +50,8 @@ public class SecurityConfig {
                         // 헬스체크 허용
                         .requestMatchers("/health").permitAll()
                         // 테스트 API 허용
+                        .requestMatchers("/ws/**", "/ws/serving/**").permitAll()
+                        // 🌟 웹소켓 경로 추가 및 서빙 API 완전 개방 (테스트용)
                         .requestMatchers("/api/v3/spring/test/**").permitAll()
                         // 그 외 모든 요청 허용 (필요시 인증 필요로 변경)
                         .anyRequest().permitAll()
@@ -83,7 +85,9 @@ public class SecurityConfig {
                 "http://127.0.0.1:5173",
                 "https://127.0.0.1:5173",
                 "http://127.0.0.1:5174",
-                "https://127.0.0.1:5174"
+                "https://127.0.0.1:5174",
+                "https://dev.dorder-api.shop",  // 필수 추가
+                "http://dev.dorder-api.shop"    // 필수 추가
         ));
 
         // 허용할 HTTP 메서드
