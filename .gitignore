@@ -3,6 +3,7 @@
 
 ### Django ###
 *.log
+logs/
 *.pot
 *.pyc
 __pycache__/
@@ -133,6 +134,7 @@ celerybeat.pid
 
 # Environments
 .env
+.*.env
 .venv
 env/
 venv/

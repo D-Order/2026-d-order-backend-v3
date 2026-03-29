@@ -2,12 +2,18 @@
 D-Order 백엔드 레포입니다.
 ---
 
-## Contributors
-| 이름 | Email | 담담 |
-| --- | --- | --- |
-|  |  |  |
-|  |  |  |
-|  |  |  |
+## V3 Contributors
+| 이름                                         | Email           | 담담                |
+| ------------------------------------------ | --------------  | -------------------- |
+| 강근우 | gn00py48@dgu.ac.kr | SpringBoot |
+| 오태준 | xownswns@naver.com | SpringBoot |
+| 이동건 | plasma1233@dgu.ac.kr | Infra / SpringBoot |
+| 임수빈 | forestbin0420@dgu.ac.kr | Django |
+| 박선우 | sunwoo030616@dgu.ac.kr | Django |
+| 차은호 | eunho2002@dgu.ac.kr | Infra / Django |  
+
+
+
 ## 📁 프로젝트 구조
 
 ```

@@ -106,6 +106,40 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
+---
+# ==================================================================
+# prod 환경 전용 설정 (Docker 컨테이너용)
+# docker-compose.prod.yml에서 사용
+# DB_HOST는 AWS RDS 엔드포인트
+# ==================================================================
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:5432/${POSTGRES_DB:d_order}
+    username: ${SPRING_DB_USER}
+    password: ${SPRING_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        show_sql: false
+        format_sql: false
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
 # 서버 설정
 server:
   port: 8080

@@ -177,13 +177,8 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        'OPTIONS': {'min_length': 4},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
@@ -230,12 +225,35 @@ SIMPLE_JWT = {
     # 쿠키 기반 인증 설정
     'AUTH_COOKIE': 'access_token',
     'AUTH_COOKIE_REFRESH': 'refresh_token',
-    'AUTH_COOKIE_SECURE': IS_PRODUCTION,  # 프로덕션에서만 HTTPS 강제
+    'AUTH_COOKIE_SECURE': not IS_LOCAL,  # local 제외 HTTPS 환경에서 Secure
     'AUTH_COOKIE_HTTP_ONLY': True,
-    'AUTH_COOKIE_SAMESITE': 'Lax',
+    'AUTH_COOKIE_SAMESITE': 'None' if not IS_LOCAL else 'Lax',  # cross-origin 쿠키 전송 허용
 }
 
 # Logging 설정
+_file_handlers = {} if IS_LOCAL else {
+    'file': {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': '/app/logs/django.log',
+        'maxBytes': 1024 * 1024 * 10,  # 10MB
+        'backupCount': 5,
+        'formatter': 'verbose',
+        'encoding': 'utf-8',
+        'level': 'INFO',
+    },
+    'file_error': {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': '/app/logs/error.log',
+        'maxBytes': 1024 * 1024 * 5,   # 5MB
+        'backupCount': 3,
+        'formatter': 'verbose',
+        'encoding': 'utf-8',
+        'level': 'ERROR',
+    },
+}
+_file_handler = [] if IS_LOCAL else ['file']
+_file_error_handler = [] if IS_LOCAL else ['file_error']
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -251,12 +269,12 @@ LOGGING = {
         },
     },
 
-
     'handlers': {
-        'console': { # 콘솔에 로그 출력
+        'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',
+            'formatter': 'verbose',
         },
+        **_file_handlers,
     },
 
     'root': {
@@ -265,17 +283,37 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
+            'handlers': ['console'] + _file_handler,
             'level': 'INFO',
             'propagate': False,
         },
+        'django.request': {
+            'handlers': ['console'] + _file_error_handler,
+            'level': 'WARNING',  # 4xx=WARNING, 5xx=ERROR 자동 분류
+            'propagate': False,  # django logger 중복 방지
+        },
         'channels': {
-            'handlers': ['console'],
+            'handlers': ['console'] + _file_handler,
             'level': 'INFO',
+            'propagate': False,
+        },
+        'authentication': {
+            'handlers': ['console'] + _file_handler,
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'booth': {
+            'handlers': ['console'] + _file_handler,
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'core': {
+            'handlers': ['console'] + _file_handler,
+            'level': 'DEBUG',
             'propagate': False,
         },
         'order': {
-            'handlers': ['console'],
+            'handlers': ['console'] + _file_handler,
             'level': 'DEBUG',
             'propagate': False,
         },
@@ -379,9 +417,9 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # 쿠키 보안 설정
 CSRF_COOKIE_NAME = 'csrftoken'              # 쿠키 이름
-CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=IS_PRODUCTION)
+CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=not IS_LOCAL)
 CSRF_COOKIE_HTTPONLY = False                # JavaScript에서 접근 가능 (React에서 필요)
-CSRF_COOKIE_SAMESITE = 'Lax'                # CSRF 공격 방지
+CSRF_COOKIE_SAMESITE = 'None' if not IS_LOCAL else 'Lax'
 
 SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
 SESSION_COOKIE_HTTPONLY = env.bool('SESSION_COOKIE_HTTPONLY', default=True)

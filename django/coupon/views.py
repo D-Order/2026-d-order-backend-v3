@@ -8,6 +8,7 @@ from booth.models import *
 from .serializers import *
 from .services import *
 from .models import *
+from cart.services_ws import broadcast_cart_event
 
 
 def error_response(e: CouponError):
@@ -131,46 +132,31 @@ class CouponDeleteAPIView(APIView):
 class CouponDownloadAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, coupon_id: int):
+    def get(self, request):
         try:
             booth = get_admin_booth(request)
         except CouponError as e:
             return error_response(e)
-        coupon = get_object_or_404(Coupon, id=coupon_id, booth=booth)
-        codes = CouponCode.objects.filter(coupon=coupon).order_by("created_at")
 
-        from openpyxl import Workbook
-        from openpyxl.utils import get_column_letter
-        from io import BytesIO
         from django.utils import timezone
 
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "coupon_codes"
-
-        ws.append(["coupon_id", "coupon_name", "code", "used", "used_at", "created_at"])
-        for code in codes:
-            ws.append(
-                [
-                    coupon.id,
-                    coupon.name,
-                    code.code,
-                    bool(code.used_at),
-                    code.used_at.isoformat() if code.used_at else None,
-                    code.created_at.isoformat() if code.created_at else None,
-                ]
+        try:
+            file_bytes = build_coupon_excel_for_booth(booth=booth)
+        except Exception as e:
+            return Response(
+                {
+                    "message": "쿠폰 엑셀 다운로드 중 오류가 발생했습니다.",
+                    "data": {
+                        "error_code": "COUPON_DOWNLOAD_FAILED",
+                        "detail": str(e),
+                    },
+                },
+                status=500,
             )
 
-        for col in range(1, 7):
-            ws.column_dimensions[get_column_letter(col)].width = 22
-
-        stream = BytesIO()
-        wb.save(stream)
-        stream.seek(0)
-
-        filename = f"booth_{coupon.booth_id}_coupon_{coupon.id}_codes_{timezone.now().strftime('%Y%m%d')}.xlsx"
+        filename = f"booth_{booth.pk}_coupon_codes_{timezone.now().strftime('%Y%m%d')}.xlsx"
         resp = HttpResponse(
-            stream.getvalue(),
+            file_bytes,
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
         resp["Content-Disposition"] = f'attachment; filename="{filename}"'
@@ -183,6 +169,8 @@ class CouponApplyAPIView(APIView):
         serializer = CouponApplySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        table_usage_id = serializer.validated_data["table_usage_id"]
+        
         try:
             result = apply_coupon_code(
                 table_usage_id=serializer.validated_data["table_usage_id"],
@@ -190,6 +178,12 @@ class CouponApplyAPIView(APIView):
             )
         except CouponError as e:
             return Response({"message": e.message, "data": {"error_code": e.error_code, "detail": e.detail}}, status=e.status_code)
+        
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_COUPON_APPLIED",
+            message="쿠폰이 적용되었습니다.",
+        )
 
         return Response({"message": "쿠폰이 적용되었습니다", "data": result}, status=200)
 
@@ -197,9 +191,17 @@ class CouponApplyAPIView(APIView):
         serializer = CouponCancelSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        table_usage_id = serializer.validated_data["table_usage_id"]
+        
         try:
             result = cancel_coupon_apply(table_usage_id=serializer.validated_data["table_usage_id"])
         except CouponError as e:
             return Response({"message": e.message, "data": {"error_code": e.error_code, "detail": e.detail}}, status=e.status_code)
 
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_COUPON_CANCELLED",
+            message="쿠폰 적용이 취소되었습니다.",
+        )
+        
         return Response({"message": "쿠폰 적용이 취소되었습니다", "data": result}, status=200)

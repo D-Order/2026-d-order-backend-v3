@@ -9,7 +9,7 @@ class Order(models.Model):
     )
     table_usage = models.ForeignKey(
         'table.TableUsage',
-        on_delete=models.PROTECT,
+        on_delete=models.CASCADE,
         related_name='orders',
         help_text='이 주문이 속한 테이블 사용 기록'
     )

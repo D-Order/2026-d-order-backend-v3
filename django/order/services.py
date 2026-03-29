@@ -1,6 +1,5 @@
 import logging
 from django.db import models, transaction
-from django.db.models import Sum
 from django.utils import timezone
 from .models import Order, OrderItem
 from table.models import TableUsage
@@ -334,15 +333,9 @@ class OrderService:
         table_usage.accumulated_amount -= refund_amount
         table_usage.save(update_fields=["accumulated_amount"])
 
-        # 11) 새 총매출 계산
-        new_total_sales = (
-            Order.objects
-            .filter(
-                order_status__in=["PAID", "COMPLETED"],
-                table_usage__table__booth_id=booth_id,
-            )
-            .aggregate(total=Sum("order_price"))["total"]
-        ) or 0
+        # 11) 오늘 매출 캐시 감소 (DB 쿼리 대체)
+        from order.cache import update_today_revenue
+        new_total_sales = update_today_revenue(booth_id, -refund_amount)
 
         new_item_total_price = item.fixed_price * remaining_quantity
 
@@ -375,10 +368,10 @@ class OrderService:
                 }
             )
 
-            # 총매출 갱신
+            # 오늘 매출 갱신 이벤트 (계산된 값 포함)
             async_to_sync(channel_layer.group_send)(
                 group_name,
-                {"type": "total_sales_update", "data": {}}
+                {"type": "total_sales_update", "data": {"today_revenue": new_total_sales}}
             )
         except Exception as e:
             logger.error(f"[OrderItem 취소] WebSocket 전송 실패: {e}")
@@ -703,8 +696,11 @@ class OrderService:
         try:
             from channels.layers import get_channel_layer
             from asgiref.sync import async_to_sync
+            from order.cache import update_today_revenue
 
             booth_id = table_usage.table.booth_id
+            today_revenue = update_today_revenue(booth_id, order.order_price)
+
             group_name = f"booth_{booth_id}.order"
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
@@ -721,10 +717,10 @@ class OrderService:
                     }
                 }
             )
-            # 총매출 갱신 이벤트
+            # 오늘 매출 갱신 이벤트 (계산된 값 포함 → Consumer DB 쿼리 불필요)
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
-                {"type": "total_sales_update", "data": {}}
+                {"type": "total_sales_update", "data": {"today_revenue": today_revenue}}
             )
         except Exception as ws_err:
             logger.error(f"[Order] WebSocket 전송 실패 (주문은 정상 생성됨): {ws_err}")
@@ -820,3 +816,120 @@ class OrderService:
             logger.error(f"[PaymentRejected] WebSocket 전송 실패 (Cart 복구는 완료): {ws_err}")
 
         return {"result": "success"}
+
+
+    # ─────────────────────────────────────────────
+    # 주문 내역 dict 조립
+    # ─────────────────────────────────────────────
+
+    @staticmethod
+    def build_order_history_data(table_usage, order_limit: int = None) -> dict:
+        """
+        TableUsage에 대한 주문 내역 dict 반환.
+        TableOrderHistoryAPIView(사용자용), 어드민 테이블 목록/상세 등에서 재사용.
+
+        Args:
+            table_usage: TableUsage 인스턴스
+            order_limit: order_list 반환 개수 제한 (None이면 전체).
+                         가격 합산(총액/할인)은 항상 전체 기준으로 계산됨.
+
+        Returns:
+            {
+                table_usage_id, table_number,
+                table_total_price, total_original_price, total_discount_price,
+                order_list: [ { order_id, order_status, created_at,
+                                has_coupon, coupon_name, table_coupon_id,
+                                order_discount_price, order_fixed_price,
+                                order_items: [...] } ]
+            }
+        """
+        table = table_usage.table
+
+        orders = (
+            Order.objects
+            .filter(table_usage=table_usage)
+            .exclude(order_status="CANCELLED")
+            .order_by("created_at")
+        )
+
+        table_coupon = None
+        coupon_name = None
+        try:
+            from coupon.models import TableCoupon
+            tc = TableCoupon.objects.select_related("coupon").filter(
+                table_usage=table_usage
+            ).first()
+            if tc:
+                table_coupon = tc
+                coupon_name = tc.coupon.name
+        except Exception:
+            pass
+
+        table_total_price = 0
+        total_original_price = 0
+        total_discount_price = 0
+        order_list = []
+
+        for order in orders:
+            order_original = order.original_price or order.order_price
+            order_discount = order.total_discount or 0
+            order_fixed = order.order_price
+
+            table_total_price += order_fixed
+            total_original_price += order_original
+            total_discount_price += order_discount
+
+            has_coupon = order.coupon_id is not None
+
+            parent_items = (
+                OrderItem.objects
+                .filter(order=order, parent__isnull=True)
+                .select_related("menu", "setmenu")
+                .order_by("id")
+            )
+
+            order_items = []
+            for item in parent_items:
+                if item.setmenu_id:
+                    name = item.setmenu.name
+                    image = item.setmenu.image.url if item.setmenu.image else None
+                    menu_id = item.setmenu_id
+                    from_set = True
+                else:
+                    name = item.menu.name if item.menu else "알 수 없음"
+                    image = item.menu.image.url if item.menu and item.menu.image else None
+                    menu_id = item.menu_id
+                    from_set = False
+
+                order_items.append({
+                    "id": item.pk,
+                    "menu_id": menu_id,
+                    "name": name,
+                    "image": image,
+                    "quantity": item.quantity,
+                    "fixed_price": item.fixed_price,
+                    "item_total_price": item.fixed_price * item.quantity,
+                    "status": item.status,
+                    "from_set": from_set,
+                })
+
+            order_list.append({
+                "order_id": order.pk,
+                "order_status": order.order_status,
+                "created_at": timezone.localtime(order.created_at).isoformat(),
+                "has_coupon": has_coupon,
+                "coupon_name": coupon_name if has_coupon else None,
+                "table_coupon_id": table_coupon.pk if (has_coupon and table_coupon) else None,
+                "order_discount_price": order_discount,
+                "order_fixed_price": order_fixed,
+                "order_items": order_items,
+            })
+
+        return {
+            "table_usage_id": table_usage.pk,
+            "table_number": str(table.table_num),
+            "table_total_price": table_total_price,
+            "total_original_price": total_original_price,
+            "total_discount_price": total_discount_price,
+            "order_list": order_list[-order_limit:] if order_limit else order_list,
+        }

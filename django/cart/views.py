@@ -6,6 +6,7 @@ from table.models import TableUsage
 from .models import *
 from .serializers import *
 from .services import *
+from .services_ws import *
 
 
 def error_response(e: CartError):
@@ -31,6 +32,8 @@ class CartAddAPIView(APIView):
         serializer = AddToCartSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        table_usage_id = serializer.validated_data["table_usage_id"]
+        
         try:
             cart, item = add_to_cart(
                 table_usage_id=serializer.validated_data["table_usage_id"],
@@ -41,6 +44,12 @@ class CartAddAPIView(APIView):
             )
         except CartError as e:
             return error_response(e)
+        
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_ITEM_ADDED",
+            message="장바구니에 메뉴가 추가되었습니다.",
+        )
 
         return Response(
             {
@@ -88,11 +97,6 @@ class CartDetailAPIView(APIView):
             )
 
         cart = get_or_create_cart_by_table_usage(query_serializer.validated_data["table_usage_id"])
-
-        if cart.is_pending_expired():
-            cart.status = Cart.Status.ACTIVE
-            cart.pending_expires_at = None
-            cart.save(update_fields=["status", "pending_expires_at"])
 
         recalc_cart_price(cart)
 
@@ -178,6 +182,8 @@ class CartUpdateQuantityAPIView(APIView):
         serializer = UpdateQuantitySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        table_usage_id = serializer.validated_data["table_usage_id"]
+        
         try:
             cart, item = update_item_quantity(
                 table_usage_id=serializer.validated_data["table_usage_id"],
@@ -186,6 +192,12 @@ class CartUpdateQuantityAPIView(APIView):
             )
         except CartError as e:
             return error_response(e)
+        
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_ITEM_UPDATED",
+            message="장바구니 수량이 변경되었습니다.",
+        )
 
         data = {"cart_price": cart.cart_price}
         if item:
@@ -203,6 +215,8 @@ class CartDeleteItemAPIView(APIView):
         serializer = DeleteItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        table_usage_id = serializer.validated_data["table_usage_id"]
+        
         try:
             cart = delete_item(
                 table_usage_id=serializer.validated_data["table_usage_id"],
@@ -210,6 +224,12 @@ class CartDeleteItemAPIView(APIView):
             )
         except CartError as e:
             return error_response(e)
+        
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_ITEM_DELETED",
+            message="장바구니 항목이 삭제되었습니다.",
+        )
 
         return Response({"message": "삭제 성공", "data": {"cart_price": cart.cart_price}}, status=200)
 
@@ -222,11 +242,19 @@ class CartPaymentInfoAPIView(APIView):
     def post(self, request):
         serializer = PaymentInfoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        
+        table_usage_id = serializer.validated_data["table_usage_id"]
 
         try:
             cart, payment = enter_payment_info(table_usage_id=serializer.validated_data["table_usage_id"])
         except CartError as e:
             return error_response(e)
+        
+        broadcast_cart_event(
+            table_usage_id=table_usage_id,
+            event_type="CART_PAYMENT_PENDING",
+            message="결제 확인 화면으로 이동했습니다.",
+        )
 
         return Response(
             {

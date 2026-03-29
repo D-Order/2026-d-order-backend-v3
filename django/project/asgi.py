@@ -20,17 +20,22 @@ from authentication.middleware import JWTWebSocketMiddleware
 from django.conf import settings
 import table.routing
 import order.routing
+import cart.routing
 
 
 if 'PYTEST_CURRENT_TEST' in os.environ or os.environ.get('DJANGO_ENV') == 'test':
     # 테스트 환경에서는 JWT 미들웨어 제거
     websocket_app = URLRouter(
-        table.routing.websocket_urlpatterns + order.routing.websocket_urlpatterns
+        table.routing.websocket_urlpatterns 
+        + order.routing.websocket_urlpatterns
+        + cart.routing.websocket_urlpatterns
     )
 else:
     websocket_app = JWTWebSocketMiddleware(
         URLRouter(
-            table.routing.websocket_urlpatterns + order.routing.websocket_urlpatterns
+            table.routing.websocket_urlpatterns 
+            + order.routing.websocket_urlpatterns
+            + cart.routing.websocket_urlpatterns
         )
     )
     if not settings.DEBUG:

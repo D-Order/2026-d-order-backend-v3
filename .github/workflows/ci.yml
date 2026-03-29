@@ -20,12 +20,13 @@ jobs:
   check-labels:
     runs-on: ubuntu-latest
     outputs:
-      test-all: ${{ contains(github.event.pull_request.labels.*.name, 'DEV') }}
+      test-all: ${{ github.event.pull_request.base.ref == 'main' || contains(github.event.pull_request.labels.*.name, 'DEV') }}
       test-django: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-DJANGO') }}
       test-spring: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-SPRING') }}
     steps:
       - name: Check labels
         run: |
+          echo "Target branch: ${{ github.event.pull_request.base.ref }}"
           echo "DEV: ${{ contains(github.event.pull_request.labels.*.name, 'DEV') }}"
           echo "DEV-DJANGO: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-DJANGO') }}"
           echo "DEV-SPRING: ${{ contains(github.event.pull_request.labels.*.name, 'DEV-SPRING') }}"

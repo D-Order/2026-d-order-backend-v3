@@ -98,6 +98,17 @@ class TableOrderHistoryResponseSerializer(serializers.Serializer):
     order_list = OrderHistoryOrderSerializer(many=True)
 
 
-class AdminTableOrderHistoryResponseSerializer(TableOrderHistoryResponseSerializer):
-    """주문 내역 – 최종 응답 data (어드민용, table_id 추가)"""
-    table_id = serializers.IntegerField()
+class AdminOrderItemSerializer(serializers.Serializer):
+    """주문 내역 – 어드민용 아이템 (이름, 수량, 가격, 생성시각)"""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    quantity = serializers.IntegerField()
+    fixed_price = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+
+
+class AdminTableOrderHistoryResponseSerializer(serializers.Serializer):
+    """주문 내역 – 최종 응답 data (어드민용, order_items flat list)"""
+    table_number = serializers.CharField()
+    table_total_price = serializers.IntegerField()
+    order_items = AdminOrderItemSerializer(many=True)

@@ -55,6 +55,20 @@ class BoothMyPageQRcodeAPIView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
+class BoothTableUsageResetAPIView(APIView):
+    """테스트 데이터를 지우기 위한 초기화
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        booth = request.user.booth
+        deleted_count = BoothService.reset_booth_table_usage(booth)
+        return Response({
+            'message': '모든 테이블 사용 기록이 삭제되었습니다.',
+            'data': {'deleted_count': deleted_count},
+        }, status=status.HTTP_200_OK)
+
+
 class BoothNameAPIView(APIView):
     """부스 이름 조회용"""
     permission_classes = [AllowAny]

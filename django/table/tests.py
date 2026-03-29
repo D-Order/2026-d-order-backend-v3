@@ -1,5 +1,6 @@
 import logging
-from django.test import override_settings, TransactionTestCase
+from datetime import timedelta
+from django.test import override_settings, TransactionTestCase, TestCase
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
@@ -13,6 +14,8 @@ from booth.models import Booth
 from table.models import Table, TableGroup, TableUsage
 from table.consumers import TableConsumer
 from table.services import TableService
+from menu.models import Menu
+from order.models import Order, OrderItem
 from core.test_utils import IN_MEMORY_STORAGES, suppress_request_warnings
 
 User = get_user_model()
@@ -66,14 +69,12 @@ class TableListTestCase(APITestCase):
         response = self.client.get(TABLE_LIST_URL)
 
         for table_data in response.data['data']:
-            self.assertIn('booth', table_data)
             self.assertIn('table_num', table_data)
             self.assertIn('status', table_data)
             self.assertIn('group', table_data)
             self.assertIn('accumulated_amount', table_data)
-            self.assertIn('recent_3_orders', table_data)
+            self.assertIn('order_list', table_data)
             self.assertIn('started_at', table_data)
-            self.assertEqual(table_data['booth'], self.booth.pk)
 
     def test_get_tables_initial_state(self):
         """초기 상태: 전부 AVAILABLE, group None, started_at None"""
@@ -93,9 +94,229 @@ class TableListTestCase(APITestCase):
         table_nums = [t['table_num'] for t in response.data['data']]
         self.assertEqual(table_nums, sorted(table_nums))
 
+    def test_get_tables_order_list_empty_when_no_orders(self):
+        """주문 없는 테이블의 order_list는 빈 리스트"""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(TABLE_LIST_URL)
+
+        for table_data in response.data['data']:
+            self.assertEqual(table_data['order_list'], [])
+
+    def test_get_tables_order_list_flat_with_name_quantity(self):
+        """order_list가 name, quantity만 가진 flat list로 반환"""
+        self.client.force_authenticate(user=self.user)
+
+        table = Table.objects.get(booth=self.booth, table_num=1)
+        table.status = Table.Status.IN_USE
+        table.save()
+        usage = TableUsage.objects.create(table=table, started_at=now())
+        menu = Menu.objects.create(booth=self.booth, name='아메리카노', price=4000, stock=10)
+        order = Order.objects.create(
+            table_usage=usage, order_price=8000, original_price=8000, order_status='PAID',
+        )
+        OrderItem.objects.create(
+            order=order, menu=menu, quantity=2, fixed_price=4000, status='COOKING',
+        )
+
+        response = self.client.get(TABLE_LIST_URL)
+        table_data = next(t for t in response.data['data'] if t['table_num'] == 1)
+        order_list = table_data['order_list']
+
+        self.assertEqual(len(order_list), 1)
+        self.assertEqual(order_list[0]['name'], '아메리카노')
+        self.assertEqual(order_list[0]['quantity'], 2)
+        self.assertNotIn('fixed_price', order_list[0])
+
+    def test_get_tables_order_list_newest_first(self):
+        """order_list는 최신 항목이 먼저 반환"""
+        self.client.force_authenticate(user=self.user)
+
+        table = Table.objects.get(booth=self.booth, table_num=1)
+        table.status = Table.Status.IN_USE
+        table.save()
+        usage = TableUsage.objects.create(table=table, started_at=now())
+        order = Order.objects.create(
+            table_usage=usage, order_price=10000, original_price=10000, order_status='PAID',
+        )
+        menu1 = Menu.objects.create(booth=self.booth, name='첫번째메뉴', price=3000, stock=10)
+        menu2 = Menu.objects.create(booth=self.booth, name='두번째메뉴', price=3000, stock=10)
+        OrderItem.objects.create(order=order, menu=menu1, quantity=1, fixed_price=3000, status='COOKING')
+        OrderItem.objects.create(order=order, menu=menu2, quantity=1, fixed_price=3000, status='COOKING')
+
+        response = self.client.get(TABLE_LIST_URL)
+        table_data = next(t for t in response.data['data'] if t['table_num'] == 1)
+        order_list = table_data['order_list']
+
+        self.assertEqual(order_list[0]['name'], '두번째메뉴')
+        self.assertEqual(order_list[1]['name'], '첫번째메뉴')
+
+    def test_get_tables_order_list_max_3(self):
+        """order_list는 최대 3개 반환"""
+        self.client.force_authenticate(user=self.user)
+
+        table = Table.objects.get(booth=self.booth, table_num=1)
+        table.status = Table.Status.IN_USE
+        table.save()
+        usage = TableUsage.objects.create(table=table, started_at=now())
+        order = Order.objects.create(
+            table_usage=usage, order_price=20000, original_price=20000, order_status='PAID',
+        )
+        for i in range(5):
+            menu = Menu.objects.create(booth=self.booth, name=f'메뉴{i}', price=4000, stock=10)
+            OrderItem.objects.create(
+                order=order, menu=menu, quantity=1, fixed_price=4000, status='COOKING',
+            )
+
+        response = self.client.get(TABLE_LIST_URL)
+        table_data = next(t for t in response.data['data'] if t['table_num'] == 1)
+
+        self.assertLessEqual(len(table_data['order_list']), 3)
+
     def test_get_tables_unauthorized(self):
         """인증 없이 조회 시 401"""
         response = self.client.get(TABLE_LIST_URL)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
+class TableRetrieveTestCase(APITestCase):
+    """테이블 디테일 조회 테스트"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
+        self.user = User.objects.get(username='testuser')
+        self.booth = Booth.objects.get(user=self.user)
+        self.client.cookies.clear()
+
+    def _detail_url(self, table_num):
+        return f'{TABLE_LIST_URL}{table_num}/'
+
+    def _activate_table(self, table_num):
+        """테이블 IN_USE + TableUsage 생성"""
+        table = Table.objects.get(booth=self.booth, table_num=table_num)
+        table.status = Table.Status.IN_USE
+        table.save()
+        return TableUsage.objects.create(table=table, started_at=now())
+
+    def _create_order(self, usage, menu_name='아메리카노', price=4000, quantity=2):
+        """Order + OrderItem 생성"""
+        menu = Menu.objects.create(booth=self.booth, name=menu_name, price=price, stock=10)
+        order = Order.objects.create(
+            table_usage=usage,
+            order_price=price * quantity,
+            original_price=price * quantity,
+            order_status='PAID',
+        )
+        OrderItem.objects.create(
+            order=order, menu=menu, quantity=quantity,
+            fixed_price=price, status='COOKING',
+        )
+        return order
+
+    def test_retrieve_success(self):
+        """디테일 조회 성공 - 200"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage)
+
+        response = self.client.get(self._detail_url(1))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('data', response.data)
+
+    def test_retrieve_response_fields(self):
+        """응답 필드 구조 검증 - table_number, table_total_price, order_items"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage)
+
+        response = self.client.get(self._detail_url(1))
+        data = response.data['data']
+
+        self.assertIn('table_number', data)
+        self.assertIn('table_total_price', data)
+        self.assertIn('order_items', data)
+
+    def test_retrieve_order_items_flat_list(self):
+        """여러 Order의 OrderItem이 하나의 flat list로 반환"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, menu_name='아메리카노', price=4000, quantity=1)
+        self._create_order(usage, menu_name='라떼', price=5000, quantity=2)
+
+        response = self.client.get(self._detail_url(1))
+        order_items = response.data['data']['order_items']
+
+        self.assertIsInstance(order_items, list)
+        self.assertEqual(len(order_items), 2)
+
+    def test_retrieve_order_item_fields(self):
+        """order_items 각 항목에 id, name, quantity, fixed_price, created_at 포함"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, menu_name='아메리카노', price=4000, quantity=2)
+
+        response = self.client.get(self._detail_url(1))
+        item = response.data['data']['order_items'][0]
+
+        self.assertIn('id', item)
+        self.assertIsNotNone(item['id'])
+        self.assertEqual(item['name'], '아메리카노')
+        self.assertEqual(item['quantity'], 2)
+        self.assertEqual(item['fixed_price'], 4000)
+        self.assertIn('created_at', item)
+        self.assertIsNotNone(item['created_at'])
+
+    def test_retrieve_total_price(self):
+        """table_total_price가 usage.accumulated_amount와 일치"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, price=4000, quantity=2)   # 8000
+        self._create_order(usage, menu_name='라떼', price=5000, quantity=1)  # 5000
+        usage.accumulated_amount = 13000
+        usage.save()
+
+        response = self.client.get(self._detail_url(1))
+
+        self.assertEqual(response.data['data']['table_total_price'], 13000)
+
+    def test_retrieve_order_items_newest_first(self):
+        """order_items는 최신 항목이 먼저 반환"""
+        self.client.force_authenticate(user=self.user)
+        usage = self._activate_table(1)
+        self._create_order(usage, menu_name='첫번째메뉴', price=3000, quantity=1)
+        self._create_order(usage, menu_name='두번째메뉴', price=3000, quantity=1)
+
+        response = self.client.get(self._detail_url(1))
+        order_items = response.data['data']['order_items']
+
+        self.assertEqual(order_items[0]['name'], '두번째메뉴')
+        self.assertEqual(order_items[1]['name'], '첫번째메뉴')
+
+    def test_retrieve_no_active_usage_returns_404(self):
+        """활성 세션 없는 테이블 조회 시 404"""
+        self.client.force_authenticate(user=self.user)
+
+        with suppress_request_warnings():
+            response = self.client.get(self._detail_url(1))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_retrieve_table_not_found_returns_404(self):
+        """존재하지 않는 테이블 조회 시 404"""
+        self.client.force_authenticate(user=self.user)
+
+        with suppress_request_warnings():
+            response = self.client.get(self._detail_url(9999))
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_retrieve_unauthorized_returns_401(self):
+        """인증 없이 조회 시 401"""
+        with suppress_request_warnings():
+            response = self.client.get(self._detail_url(1))
+
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
@@ -305,6 +526,27 @@ class TableMergeTestCase(APITestCase):
             response = self.client.post(MERGE_URL, {'table_nums': [1, 2]}, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_병합_후_모든_테이블_IN_USE(self):
+        """세션 있는 테이블 병합 후 모든 테이블이 IN_USE여야 함"""
+        from table.models import TableUsage
+        self.client.force_authenticate(user=self.user)
+        t1 = Table.objects.get(booth=self.booth, table_num=1)
+        t2 = Table.objects.get(booth=self.booth, table_num=2)
+        t3 = Table.objects.get(booth=self.booth, table_num=3)
+
+        # t2, t3만 IN_USE (t1은 ACTIVE)
+        TableUsage.objects.create(table=t2, started_at=now())
+        TableUsage.objects.create(table=t3, started_at=now())
+        t2.status = Table.Status.IN_USE
+        t2.save()
+        t3.status = Table.Status.IN_USE
+        t3.save()
+
+        self.client.post(MERGE_URL, {'table_nums': [1, 2, 3]}, format='json')
+
+        for table in Table.objects.filter(booth=self.booth, table_num__in=[1, 2, 3]):
+            self.assertEqual(table.status, Table.Status.IN_USE)
 
 
 @override_settings(STORAGES=IN_MEMORY_STORAGES)
@@ -616,3 +858,352 @@ class TableConsumerServiceIntegrationTest(TransactionTestCase):
         self.assertEqual(response['data']['count'], 3)
 
         await communicator.disconnect()
+
+
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
+class MergeActiveUsagesTestCase(TestCase):
+    """TableService._merge_active_usages 단위 테스트
+
+    Known limitation:
+        rep_cart가 other_carts에서 pop된 경우, 해당 cart의 pending 쿠폰이
+        나머지 other_carts의 historical 쿠폰 이전으로 인해 round가 밀려
+        유실될 수 있음. (rep_cart.round > pending 쿠폰의 round)
+    """
+
+    def setUp(self):
+        client = APIClient()
+        client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
+        self.user = User.objects.get(username='testuser')
+        self.booth = Booth.objects.get(user=self.user)
+        self.t1 = Table.objects.get(booth=self.booth, table_num=1)
+        self.t2 = Table.objects.get(booth=self.booth, table_num=2)
+        self.t3 = Table.objects.get(booth=self.booth, table_num=3)
+        self.menu1 = Menu.objects.create(booth=self.booth, name='아메리카노', price=4000, stock=10)
+        self.menu2 = Menu.objects.create(booth=self.booth, name='라떼', price=5000, stock=10)
+
+        from coupon.models import Coupon
+        self.coupon = Coupon.objects.create(
+            booth=self.booth, name='10% 할인', discount_type='RATE', discount_value=10
+        )
+        self._code_counter = 0
+
+    # ─── Helpers ──────────────────────────────────────────────────────────
+
+    def _usage(self, table, minutes_ago=0, accumulated=0):
+        return TableUsage.objects.create(
+            table=table,
+            started_at=now() - timedelta(minutes=minutes_ago),
+            accumulated_amount=accumulated,
+        )
+
+    def _cart(self, usage, cart_price=0, round=0):
+        from cart.models import Cart
+        return Cart.objects.create(table_usage=usage, cart_price=cart_price, round=round)
+
+    def _cart_item(self, cart, menu, quantity=1):
+        from cart.models import CartItem
+        return CartItem.objects.create(cart=cart, menu=menu, quantity=quantity, price_at_cart=menu.price)
+
+    def _coupon_code(self):
+        self._code_counter += 1
+        from coupon.models import CouponCode
+        return CouponCode.objects.create(coupon=self.coupon, code=f'CODE{self._code_counter:04d}')
+
+    def _cart_coupon_apply(self, cart, round, code):
+        from coupon.models import CartCouponApply
+        return CartCouponApply.objects.create(cart=cart, round=round, coupon_code=code)
+
+    def _table_coupon(self, usage):
+        from coupon.models import TableCoupon
+        return TableCoupon.objects.create(coupon=self.coupon, table_usage=usage)
+
+    def _order(self, usage, price=1000):
+        return Order.objects.create(table_usage=usage, order_price=price, original_price=price, order_status='PAID')
+
+    def _call(self, tables):
+        all_table_ids = [t.id for t in tables]
+        representative_table = min(tables, key=lambda t: t.table_num)
+        TableService._merge_active_usages(all_table_ids, representative_table)
+        return representative_table
+
+    def _rep_usage(self, rep_table):
+        return TableUsage.objects.get(table=rep_table, ended_at__isnull=True)
+
+    # ─── 기본 동작 ────────────────────────────────────────────────────────
+
+    def test_활성_usage_없으면_아무것도_변경되지_않음(self):
+        self._call([self.t1, self.t2])
+        self.assertEqual(TableUsage.objects.count(), 0)
+
+    def test_rep_테이블에만_usage_있으면_종료되지_않음(self):
+        usage = self._usage(self.t1, minutes_ago=30, accumulated=5000)
+        self._call([self.t1, self.t2])
+        usage.refresh_from_db()
+        self.assertIsNone(usage.ended_at)
+        self.assertEqual(usage.table, self.t1)
+
+    # ─── TableUsage 병합 ──────────────────────────────────────────────────
+
+    def test_accumulated_amount_합산됨(self):
+        self._usage(self.t1, accumulated=3000)
+        self._usage(self.t2, accumulated=5000)
+        self._call([self.t1, self.t2])
+        self.assertEqual(self._rep_usage(self.t1).accumulated_amount, 8000)
+
+    def test_accumulated_amount_3개_합산됨(self):
+        self._usage(self.t1, accumulated=1000)
+        self._usage(self.t2, accumulated=2000)
+        self._usage(self.t3, accumulated=3000)
+        self._call([self.t1, self.t2, self.t3])
+        self.assertEqual(self._rep_usage(self.t1).accumulated_amount, 6000)
+
+    def test_earliest_started_at_적용됨(self):
+        early = now() - timedelta(minutes=60)
+        late = now() - timedelta(minutes=10)
+        TableUsage.objects.create(table=self.t1, started_at=late)
+        TableUsage.objects.create(table=self.t2, started_at=early)
+        self._call([self.t1, self.t2])
+        rep = self._rep_usage(self.t1)
+        self.assertAlmostEqual(rep.started_at.timestamp(), early.timestamp(), delta=1)
+
+    def test_other_usage_삭제됨(self):
+        self._usage(self.t1)
+        self._usage(self.t2)
+        self._usage(self.t3)
+        self._call([self.t1, self.t2, self.t3])
+        self.assertEqual(TableUsage.objects.filter(ended_at__isnull=True).count(), 1)
+        self.assertTrue(TableUsage.objects.filter(table=self.t1, ended_at__isnull=True).exists())
+
+    def test_rep_테이블_usage_없을때_가장_이른_usage_재할당됨(self):
+        TableUsage.objects.create(table=self.t2, started_at=now() - timedelta(minutes=60))
+        TableUsage.objects.create(table=self.t3, started_at=now() - timedelta(minutes=10))
+        self._call([self.t1, self.t2, self.t3])
+        self.assertTrue(TableUsage.objects.filter(table=self.t1, ended_at__isnull=True).exists())
+        self.assertEqual(TableUsage.objects.filter(ended_at__isnull=True).count(), 1)
+
+    # ─── Order 재할당 ─────────────────────────────────────────────────────
+
+    def test_other_usage의_order가_rep_usage로_재할당됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        o1 = self._order(u1)
+        o2 = self._order(u2)
+        self._call([self.t1, self.t2])
+        rep = self._rep_usage(self.t1)
+        o1.refresh_from_db()
+        o2.refresh_from_db()
+        self.assertEqual(o1.table_usage, rep)
+        self.assertEqual(o2.table_usage, rep)
+
+    def test_order_개수_손실_없음(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        for _ in range(3):
+            self._order(u1)
+        for _ in range(2):
+            self._order(u2)
+        self._call([self.t1, self.t2])
+        rep = self._rep_usage(self.t1)
+        self.assertEqual(Order.objects.filter(table_usage=rep).count(), 5)
+
+    # ─── Cart 병합 ────────────────────────────────────────────────────────
+
+    def test_rep_cart_없을때_other_cart_재할당됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart2 = self._cart(u2, cart_price=5000)
+        self._call([self.t1, self.t2])
+        cart2.refresh_from_db()
+        self.assertEqual(cart2.table_usage, self._rep_usage(self.t1))
+
+    def test_cart_items_중복_없을때_rep_cart로_이전됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1)
+        cart2 = self._cart(u2)
+        self._cart_item(cart1, self.menu1, quantity=1)
+        self._cart_item(cart2, self.menu2, quantity=2)
+        self._call([self.t1, self.t2])
+        self.assertEqual(cart1.items.count(), 2)
+
+    def test_cart_items_동일_메뉴_수량_합산됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1)
+        cart2 = self._cart(u2)
+        self._cart_item(cart1, self.menu1, quantity=1)
+        self._cart_item(cart2, self.menu1, quantity=3)
+        self._call([self.t1, self.t2])
+        item = cart1.items.get(menu=self.menu1)
+        self.assertEqual(item.quantity, 4)
+        self.assertEqual(cart1.items.count(), 1)
+
+    def test_cart_price_합산됨(self):
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, cart_price=3000)
+        cart2 = self._cart(u2, cart_price=7000)
+        self._call([self.t1, self.t2])
+        cart1.refresh_from_db()
+        self.assertEqual(cart1.cart_price, 10000)
+
+    def test_other_cart_삭제됨(self):
+        from cart.models import Cart
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1)
+        self._cart(u2)
+        self._call([self.t1, self.t2])
+        self.assertEqual(Cart.objects.count(), 1)
+
+    def test_cart_item_개수_손실_없음(self):
+        from cart.models import CartItem
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1)
+        cart2 = self._cart(u2)
+        self._cart_item(cart1, self.menu1, quantity=1)
+        self._cart_item(cart2, self.menu2, quantity=2)  # 다른 메뉴 → 이전
+        self._call([self.t1, self.t2])
+        self.assertEqual(CartItem.objects.filter(cart=cart1).count(), 2)
+
+    # ─── CartCouponApply ──────────────────────────────────────────────────
+
+    def test_과거_라운드_쿠폰_rep_cart로_이전됨(self):
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=2)  # round 0, 1은 과거
+        self._cart_coupon_apply(cart2, round=0, code=self._coupon_code())
+        self._cart_coupon_apply(cart2, round=1, code=self._coupon_code())
+        self._call([self.t1, self.t2])
+        self.assertEqual(CartCouponApply.objects.filter(cart=cart1).count(), 2)
+
+    def test_과거_라운드_쿠폰_이전_후_other_cart_레코드_없음(self):
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=2)
+        code_a = self._coupon_code()
+        self._cart_coupon_apply(cart2, round=0, code=code_a)
+        self._call([self.t1, self.t2])
+        # cart2는 삭제됐으므로 code_a의 CartCouponApply는 cart1로 이전
+        self.assertEqual(CartCouponApply.objects.filter(coupon_code=code_a).count(), 1)
+        self.assertEqual(CartCouponApply.objects.get(coupon_code=code_a).cart.table_usage.table, self.t1)
+
+    def test_pending_쿠폰_CartCouponApply_삭제됨(self):
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=1)  # round 1이 현재 (pending)
+        code_past = self._coupon_code()
+        code_pending = self._coupon_code()
+        self._cart_coupon_apply(cart2, round=0, code=code_past)     # 과거
+        self._cart_coupon_apply(cart2, round=1, code=code_pending)  # pending
+        self._call([self.t1, self.t2])
+        self.assertFalse(CartCouponApply.objects.filter(coupon_code=code_pending).exists())
+
+    def test_pending_쿠폰_code_used_at_None_유지됨(self):
+        """삭제된 pending 쿠폰의 CouponCode.used_at은 None → 재사용 가능"""
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._cart(u1)
+        cart2 = self._cart(u2, round=0)
+        code = self._coupon_code()
+        self._cart_coupon_apply(cart2, round=0, code=code)
+        self._call([self.t1, self.t2])
+        code.refresh_from_db()
+        self.assertIsNone(code.used_at)
+
+    def test_rep_cart_round_마이그레이션_후_충돌_없음(self):
+        """이전된 쿠폰의 round가 rep_cart.round를 초과하면 rep_cart.round가 업데이트됨"""
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=2)  # historical: round 0, 1
+        self._cart_coupon_apply(cart2, round=0, code=self._coupon_code())
+        self._cart_coupon_apply(cart2, round=1, code=self._coupon_code())
+        self._call([self.t1, self.t2])
+        cart1.refresh_from_db()
+        # round_offset = 0 (rep_cart.round) + 2 historical = 2
+        self.assertEqual(cart1.round, 2)
+        # 다음 주문 round += 1 → 3, round 3에 CartCouponApply 없음
+        self.assertFalse(CartCouponApply.objects.filter(cart=cart1, round=3).exists())
+
+    def test_rep_cart_pending_쿠폰_유지됨(self):
+        """rep_cart의 pending 쿠폰은 other_cart 이전에 의해 영향받지 않음"""
+        from coupon.models import CartCouponApply
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        cart1 = self._cart(u1, round=0)
+        cart2 = self._cart(u2, round=0)  # other cart, 쿠폰 없음
+        code_rep = self._coupon_code()
+        self._cart_coupon_apply(cart1, round=0, code=code_rep)  # rep_cart pending
+        self._call([self.t1, self.t2])
+        # rep_cart의 pending 쿠폰이 살아있음
+        self.assertTrue(CartCouponApply.objects.filter(cart=cart1, coupon_code=code_rep).exists())
+
+    # ─── TableCoupon ──────────────────────────────────────────────────────
+
+    def test_rep_usage_쿠폰_없을때_other에서_재할당됨(self):
+        from coupon.models import TableCoupon
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._table_coupon(u2)
+        self._call([self.t1, self.t2])
+        self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
+        self.assertEqual(TableCoupon.objects.count(), 1)
+
+    def test_rep_usage_쿠폰_있을때_other_쿠폰_삭제됨(self):
+        from coupon.models import TableCoupon, Coupon
+        coupon2 = Coupon.objects.create(
+            booth=self.booth, name='5000원 할인', discount_type='AMOUNT', discount_value=5000
+        )
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        self._table_coupon(u1)
+        TableCoupon.objects.create(coupon=coupon2, table_usage=u2)
+        self._call([self.t1, self.t2])
+        self.assertEqual(TableCoupon.objects.count(), 1)
+        self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
+
+    def test_여러_other_쿠폰_중_하나만_rep_usage로_재할당됨(self):
+        from coupon.models import TableCoupon, Coupon
+        coupon2 = Coupon.objects.create(
+            booth=self.booth, name='2000원 할인', discount_type='AMOUNT', discount_value=2000
+        )
+        u1 = self._usage(self.t1)
+        u2 = self._usage(self.t2)
+        u3 = self._usage(self.t3)
+        TableCoupon.objects.create(coupon=self.coupon, table_usage=u2)
+        TableCoupon.objects.create(coupon=coupon2, table_usage=u3)
+        self._call([self.t1, self.t2, self.t3])
+        self.assertEqual(TableCoupon.objects.count(), 1)
+        self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
+
+    # ─── 회귀 테스트 ──────────────────────────────────────────────────────
+
+    def test_paid_order_있는_테이블_병합시_ProtectedError_없음(self):
+        """PAID 주문이 있는 테이블 병합 시 ProtectedError 없이 성공해야 함"""
+        from cart.models import Cart
+        self._usage(self.t1, minutes_ago=30)
+        usage2 = self._usage(self.t2, minutes_ago=20)
+        other_cart = Cart.objects.create(table_usage=usage2, cart_price=5000)
+        order = Order.objects.create(
+            table_usage=usage2,
+            cart=other_cart,
+            order_price=5000,
+            original_price=5000,
+            order_status='PAID',
+        )
+
+        self._call([self.t1, self.t2])
+
+        order.refresh_from_db()
+        rep_cart = Cart.objects.get(table_usage=self._rep_usage(self.t1))
+        self.assertEqual(order.cart, rep_cart)
