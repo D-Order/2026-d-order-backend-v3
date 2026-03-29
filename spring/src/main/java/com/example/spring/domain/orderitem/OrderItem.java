@@ -5,7 +5,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "`Orderitem`")
+@Table(name = "orderitem") // 소문자로 통일
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderItem {
@@ -14,16 +14,16 @@ public class OrderItem {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "`order`", nullable = false)
+    @Column(name = "order", nullable = false) // DB 결과에 따라 언더바 제거
     private Long orderId;
 
-    @Column(name = "menu", nullable = false)
+    @Column(name = "menu", nullable = false) // DB 결과와 일치
     private Long menuId;
 
-    @Column(name = "setmenu", nullable = false)
+    @Column(name = "setmenu", nullable = false) // DB 결과와 일치
     private Long setmenuId;
 
-    @Column(name = "parent", nullable = false)
+    @Column(name = "parent", nullable = false) // DB 결과와 일치
     private Long parentId;
 
     @Column(name = "quantity")
@@ -45,6 +45,6 @@ public class OrderItem {
     @Column(name = "served_at")
     private LocalDateTime servedAt;
 
-    @Column(name = "`Key`", nullable = false, length = 255)
+    @Column(name = "key", nullable = false, length = 255) // 소문자 key
     private String key;
 }
