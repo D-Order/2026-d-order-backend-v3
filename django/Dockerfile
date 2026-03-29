@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY --chown=appuser:appuser . .
 RUN chmod +x entrypoint.sh && \
     mkdir -p /app/logs && \
-    chown appuser:appuser /app/logs
+    chown appuser:appuser /app /app/logs
 
 USER appuser
 

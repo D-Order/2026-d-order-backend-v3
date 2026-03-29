@@ -4,8 +4,6 @@
 spring:
   application:
     name: spring
-  profiles:
-    active: local
 
   jpa:
     hibernate:
