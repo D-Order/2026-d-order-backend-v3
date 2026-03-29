@@ -232,8 +232,7 @@ SIMPLE_JWT = {
     'AUTH_COOKIE_REFRESH': 'refresh_token',
     'AUTH_COOKIE_SECURE': not IS_LOCAL,  # local 제외 HTTPS 환경에서 Secure
     'AUTH_COOKIE_HTTP_ONLY': True,
-    # 'AUTH_COOKIE_SAMESITE': 'None' if not IS_LOCAL else 'Lax',  # cross-origin 쿠키 전송 허용
-    'AUTH_COOKIE_SAMESITE': 'Lax',  # cross-origin 쿠키 전송 허용
+    'AUTH_COOKIE_SAMESITE': 'None' if IS_DEVELOPMENT else 'Lax',  # dev: cross-origin 쿠키 전송 허용
     'AUTH_COOKIE_DOMAIN': None if IS_LOCAL else '.dorder-api.shop',
 }
 
