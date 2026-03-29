@@ -86,8 +86,11 @@ public class SecurityConfig {
                 "https://127.0.0.1:5173",
                 "http://127.0.0.1:5174",
                 "https://127.0.0.1:5174",
-                "https://dev.dorder-api.shop",  // 필수 추가
-                "http://dev.dorder-api.shop"    // 필수 추가
+                "https://dev.dorder-api.shop",
+                "http://dev.dorder-api.shop",
+                "https://admin.dorder-api.shop",
+                "https://customer.dorder-api.shop",
+                "https://server.dorder-api.shop"
         ));
 
         // 허용할 HTTP 메서드
