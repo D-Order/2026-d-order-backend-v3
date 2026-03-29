@@ -196,9 +196,8 @@ jobs:
             UPCONF
 
               docker compose -f docker-compose.prod.yml --profile blue pull -q
-              docker compose -f docker-compose.prod.yml --profile blue up -d
+              docker compose -f docker-compose.prod.yml --profile blue up -d --wait --wait-timeout 300
 
-              sleep 30
               curl -sf http://localhost/health/django || exit 1
               curl -sf http://localhost/health/spring || exit 1
 
