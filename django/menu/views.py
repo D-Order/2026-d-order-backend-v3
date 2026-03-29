@@ -212,32 +212,24 @@ class BoothMenuListAPIView(APIView):
                 "code": "MENU_NOT_FOUND"
             }, status=status.HTTP_404_NOT_FOUND)
         data = []
-        fee_id = 1000 + booth.pk
-        seat_type = booth.seat_type
-        fee_price = 0
-        fee_desc = ""
-        if seat_type == 'NO':
-            fee_price = 0
-            fee_desc = "FREE"
-        elif seat_type == 'PP':
-            fee_price = booth.seat_fee_person or 0
-            fee_desc = "인원 수"
-        elif seat_type == 'PT':
-            fee_price = booth.seat_fee_table or 0
-            fee_desc = "테이블"
-        fee_item = {
-            "id": fee_id,
-            "name": "테이블 이용료",
-            "price": fee_price,
-            "category": "FEE",
-            "description": fee_desc,
-            "image": None,
-            "stock": 9999,
-            "is_soldout": False,
-            "is_fixed": True,
-            "created_at": booth.created_at.isoformat() if hasattr(booth, 'created_at') else None
-        }
-        data.append(fee_item)
+        
+        # FEE 메뉴 조회 및 추가
+        fee_menu = Menu.objects.filter(booth=booth, category='FEE').first()
+        if fee_menu:
+            fee_item = {
+                "id": fee_menu.pk,
+                "name": fee_menu.name,
+                "price": int(fee_menu.price),
+                "category": fee_menu.category,
+                "description": fee_menu.description or "",
+                "image": fee_menu.image.url if fee_menu.image else None,
+                "stock": fee_menu.stock,
+                "is_soldout": fee_menu.stock == 0,
+                "is_fixed": True,
+                "created_at": fee_menu.created_at.isoformat() if hasattr(fee_menu, 'created_at') else None
+            }
+            data.append(fee_item)
+        
         menus = Menu.objects.filter(booth=booth).exclude(category="FEE").order_by("id")
         for menu in menus:
             data.append({
@@ -305,28 +297,18 @@ class UserMenuListAPIView(APIView):
                 "table_number": table_num_int,
                 "table_usage_id": usage.id if usage else None
             }
-        # FEE 동적 생성
-        fee_id = 1000 + booth.pk
-        seat_type = booth.seat_type
-        fee_price = 0
-        fee_desc = ""
-        if seat_type == 'NO':
-            fee_price = 0
-            fee_desc = "FREE"
-        elif seat_type == 'PP':
-            fee_price = booth.seat_fee_person or 0
-            fee_desc = "인원 수에 맞춰 주문해 주세요."
-        elif seat_type == 'PT':
-            fee_price = booth.seat_fee_table or 0
-            fee_desc = "테이블 기준 1회 주문이 필요해요"
-        fee_data = [{
-            "id": fee_id,
-            "name": "테이블 이용료",
-            "price": fee_price,
-            "description": fee_desc,
-            "image": None,
-            "is_soldout": False
-        }]
+        # FEE 메뉴 조회 및 추가
+        fee_data = []
+        fee_menu = Menu.objects.filter(booth=booth, category='FEE').first()
+        if fee_menu:
+            fee_data = [{
+                "id": fee_menu.pk,
+                "name": fee_menu.name,
+                "price": int(fee_menu.price),
+                "description": fee_menu.description or "",
+                "image": fee_menu.image.url if fee_menu.image else None,
+                "is_soldout": fee_menu.stock == 0
+            }]
         # SET
         set_menus = SetMenu.objects.filter(booth=booth).order_by('-price')
         set_data = []
@@ -373,7 +355,7 @@ class UserMenuListAPIView(APIView):
             "message": "메뉴판 조회 완료",
             "booth_id": booth.pk,
             "booth_name": booth.name,
-            "seat_type": seat_type,
+            "seat_type": booth.seat_type,
             "data": {
                 "FEE": fee_data,
                 "SET": set_data,

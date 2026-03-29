@@ -68,6 +68,8 @@ class CartItem(models.Model):
     @property
     def type(self) -> str:
         if self.menu_id:
+            if self.menu and self.menu.category == "FEE":
+                return "fee"
             return "menu"
         if self.setmenu_id:
             return "setmenu"
