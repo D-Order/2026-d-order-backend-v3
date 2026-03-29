@@ -17,6 +17,7 @@ def set_jwt_cookies(response, access_token, refresh_token):
         response: 쿠키가 설정된 Response 객체
     """
     jwt_settings = settings.SIMPLE_JWT
+    domain = jwt_settings.get('AUTH_COOKIE_DOMAIN')
 
     # Access Token 쿠키 설정
     response.set_cookie(
@@ -26,6 +27,7 @@ def set_jwt_cookies(response, access_token, refresh_token):
         httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
         samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
         secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
+        domain=domain,
     )
 
     # Refresh Token 쿠키 설정
@@ -36,6 +38,7 @@ def set_jwt_cookies(response, access_token, refresh_token):
         httponly=jwt_settings.get('AUTH_COOKIE_HTTP_ONLY'),
         samesite=jwt_settings.get('AUTH_COOKIE_SAMESITE'),
         secure=jwt_settings.get('AUTH_COOKIE_SECURE'),
+        domain=domain,
     )
 
     return response
@@ -54,8 +57,9 @@ def delete_jwt_cookies(response):
     jwt_settings = settings.SIMPLE_JWT
 
     samesite = jwt_settings.get('AUTH_COOKIE_SAMESITE')
+    domain = jwt_settings.get('AUTH_COOKIE_DOMAIN')
 
-    response.delete_cookie(jwt_settings.get('AUTH_COOKIE'), samesite=samesite)
-    response.delete_cookie(jwt_settings.get('AUTH_COOKIE_REFRESH'), samesite=samesite)
+    response.delete_cookie(jwt_settings.get('AUTH_COOKIE'), samesite=samesite, domain=domain)
+    response.delete_cookie(jwt_settings.get('AUTH_COOKIE_REFRESH'), samesite=samesite, domain=domain)
 
     return response
