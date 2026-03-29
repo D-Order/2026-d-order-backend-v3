@@ -69,5 +69,4 @@ ENTRYPOINT ["java", \
     "-Djava.security.egd=file:/dev/./urandom", \
     "-jar", "app.jar"]
 
-# 기본 프로필은 docker-compose에서 환경변수로 오버라이드
-CMD ["--spring.profiles.active=dev"]
+# 프로필은 SPRING_PROFILES_ACTIVE 환경변수로 설정 (docker-compose에서 주입)
