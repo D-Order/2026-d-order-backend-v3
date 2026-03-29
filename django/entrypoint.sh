@@ -7,6 +7,9 @@ set -e
 
 echo "=== Django 컨테이너 시작 ==="
 
+# 로그 디렉토리 생성
+mkdir -p /app/logs
+
 # 데이터베이스 마이그레이션 실행
 echo "데이터베이스 마이그레이션 실행 중..."
 python manage.py migrate --noinput

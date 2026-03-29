@@ -44,7 +44,9 @@ RUN groupadd -g 1001 appgroup && \
 COPY --from=builder /app/build/libs/*.jar app.jar
 
 # 권한 설정
-RUN chown appuser:appgroup app.jar
+RUN chown appuser:appgroup app.jar && \
+    mkdir -p /app/logs && \
+    chown appuser:appgroup /app/logs
 
 # 비-root 사용자로 전환
 USER appuser

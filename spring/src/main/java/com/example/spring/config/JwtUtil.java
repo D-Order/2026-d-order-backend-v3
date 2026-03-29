@@ -82,7 +82,7 @@ public class JwtUtil {
      */
     public Long getBoothIdFromToken(String token) {
         Claims claims = parseClaims(token);
-        Object boothIdObj = claims.get("user_id"); // 실제 claim 이름은 user_id
+        Object boothIdObj = claims.get("booth_id");
         if (boothIdObj instanceof String) {
             return Long.valueOf((String) boothIdObj);
         } else if (boothIdObj instanceof Number) {

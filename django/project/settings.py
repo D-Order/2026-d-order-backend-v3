@@ -231,6 +231,29 @@ SIMPLE_JWT = {
 }
 
 # Logging 설정
+_file_handlers = {} if IS_LOCAL else {
+    'file': {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': '/app/logs/django.log',
+        'maxBytes': 1024 * 1024 * 10,  # 10MB
+        'backupCount': 5,
+        'formatter': 'verbose',
+        'encoding': 'utf-8',
+        'level': 'INFO',
+    },
+    'file_error': {
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': '/app/logs/error.log',
+        'maxBytes': 1024 * 1024 * 5,   # 5MB
+        'backupCount': 3,
+        'formatter': 'verbose',
+        'encoding': 'utf-8',
+        'level': 'ERROR',
+    },
+}
+_file_handler = [] if IS_LOCAL else ['file']
+_file_error_handler = [] if IS_LOCAL else ['file_error']
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -246,12 +269,12 @@ LOGGING = {
         },
     },
 
-
     'handlers': {
-        'console': { # 콘솔에 로그 출력
+        'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',
+            'formatter': 'verbose',
         },
+        **_file_handlers,
     },
 
     'root': {
@@ -260,17 +283,37 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
+            'handlers': ['console'] + _file_handler,
             'level': 'INFO',
             'propagate': False,
         },
+        'django.request': {
+            'handlers': ['console'] + _file_error_handler,
+            'level': 'WARNING',  # 4xx=WARNING, 5xx=ERROR 자동 분류
+            'propagate': False,  # django logger 중복 방지
+        },
         'channels': {
-            'handlers': ['console'],
+            'handlers': ['console'] + _file_handler,
             'level': 'INFO',
+            'propagate': False,
+        },
+        'authentication': {
+            'handlers': ['console'] + _file_handler,
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'booth': {
+            'handlers': ['console'] + _file_handler,
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'core': {
+            'handlers': ['console'] + _file_handler,
+            'level': 'DEBUG',
             'propagate': False,
         },
         'order': {
-            'handlers': ['console'],
+            'handlers': ['console'] + _file_handler,
             'level': 'DEBUG',
             'propagate': False,
         },

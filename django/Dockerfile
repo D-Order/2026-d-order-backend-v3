@@ -20,7 +20,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # 프로젝트 코드 복사 및 권한 설정
 COPY --chown=appuser:appuser . .
-RUN chmod +x entrypoint.sh
+RUN chmod +x entrypoint.sh && \
+    mkdir -p /app/logs && \
+    chown appuser:appuser /app/logs
 
 USER appuser
 

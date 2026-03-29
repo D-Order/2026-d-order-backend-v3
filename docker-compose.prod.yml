@@ -8,13 +8,14 @@ services:
       - '80:80'
       - '443:443'
     volumes:
+      - ./nginx/upstream.conf:/etc/nginx/conf.d/upstream.conf:ro
       - certbot_www:/var/www/certbot:ro
       - certbot_certs:/etc/letsencrypt:ro
       - static_volume_prod:/app/static:ro
       - nginx_logs_prod:/var/log/nginx
     depends_on:
-      - django
-      - spring
+      - django-blue
+      - spring-blue
     healthcheck:
       test:
         [
@@ -60,9 +61,10 @@ services:
       - d-order-network-prod
     restart: unless-stopped
 
-  django:
+  django-blue:
     image: ${DOCKER_USERNAME:-local}/d-order-django:prod
-    container_name: d-order-django-prod
+    container_name: d-order-django-blue-prod
+    profiles: ['blue']
     command: daphne -b 0.0.0.0 -p 8000 project.asgi:application
     environment:
       ENVIRONMENT: production
@@ -95,16 +97,68 @@ services:
         condition: service_healthy
     volumes:
       - static_volume_prod:/app/static
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 15s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    stop_grace_period: 30s
     networks:
       - d-order-network-prod
     restart: unless-stopped
 
-  spring:
-    build:
-      context: ./spring
-      dockerfile: Dockerfile
+  django-green:
+    image: ${DOCKER_USERNAME:-local}/d-order-django:prod
+    container_name: d-order-django-green-prod
+    profiles: ['green']
+    command: daphne -b 0.0.0.0 -p 8000 project.asgi:application
+    environment:
+      ENVIRONMENT: production
+      DEBUG: 'False'
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_HOSTS_PRODUCTION: ${ALLOWED_HOSTS_PRODUCTION}
+      CORS_ALLOWED_ORIGINS_FRONTEND: ${CORS_ALLOWED_ORIGINS_FRONTEND}
+      CORS_ALLOWED_ORIGINS_BACKEND: ${CORS_ALLOWED_ORIGINS_BACKEND}
+      DB_ENGINE: ${DB_ENGINE}
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SECURE_SSL_REDIRECT: 'True'
+      CSRF_COOKIE_SECURE: 'True'
+      SESSION_COOKIE_SECURE: 'True'
+      SESSION_COOKIE_HTTPONLY: 'True'
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
+      AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+    expose:
+      - '8000'
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - static_volume_prod:/app/static
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 15s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    stop_grace_period: 30s
+    networks:
+      - d-order-network-prod
+    restart: unless-stopped
+
+  spring-blue:
     image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
-    container_name: d-order-spring-prod
+    container_name: d-order-spring-blue-prod
+    profiles: ['blue']
     environment:
       SPRING_PROFILES_ACTIVE: prod
       POSTGRES_DB: ${POSTGRES_DB}
@@ -134,6 +188,45 @@ services:
       timeout: 10s
       start_period: 60s
       retries: 3
+    stop_grace_period: 30s
+    networks:
+      - d-order-network-prod
+    restart: unless-stopped
+
+  spring-green:
+    image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
+    container_name: d-order-spring-green-prod
+    profiles: ['green']
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      POSTGRES_DB: ${POSTGRES_DB}
+      SPRING_DB_USER: ${SPRING_DB_USER}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DJANGO_API_URL: ${DJANGO_API_URL}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    expose:
+      - '8080'
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:8080/health',
+        ]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    stop_grace_period: 30s
     networks:
       - d-order-network-prod
     restart: unless-stopped

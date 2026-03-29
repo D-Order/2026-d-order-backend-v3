@@ -199,7 +199,9 @@ class TableService:
             raise ValidationError('테이블 번호는 필수입니다.')
 
         # 테이블 조회
-        table = Table.objects.filter(booth=booth, table_num=table_num).first()
+        table = Table.objects.select_related('group__representative_table').filter(
+            booth=booth, table_num=table_num
+        ).first()
         if not table:
             raise NotFound('해당 테이블을 찾을 수 없습니다.')
 
@@ -207,15 +209,21 @@ class TableService:
         if table.status == Table.Status.INACTIVE:
             raise ValidationError('해당 테이블은 현재 이용할 수 없습니다.')
 
-        # 이미 사용 중인 경우 기존 세션 반환
+        # 병합된 테이블이면 대표 테이블 기준으로 처리
+        representative_table = table.group.representative_table if table.group else table
+
+        # 이미 사용 중인 경우 대표 테이블의 기존 세션 반환
         if table.status == Table.Status.IN_USE:
-            table_usage = TableUsage.objects.filter(table=table, ended_at__isnull=True).first()
+            table_usage = TableUsage.objects.filter(table=representative_table, ended_at__isnull=True).first()
             return table_usage
 
-        # 테이블 입장 처리
-        table_usage = TableService.create_table_usage(table)
-        table.status = Table.Status.IN_USE
-        table.save()
+        # 테이블 입장 처리: 대표 테이블에 세션 생성, 그룹 전체 IN_USE
+        table_usage = TableService.create_table_usage(representative_table)
+        if table.group:
+            Table.objects.filter(group=table.group).update(status=Table.Status.IN_USE)
+        else:
+            table.status = Table.Status.IN_USE
+            table.save()
 
         TableService._broadcast(booth.pk, {
             'type': 'enter_table',
@@ -423,6 +431,11 @@ class TableService:
                     rep_cart.round = round_offset
                     rep_cart.save(update_fields=['round'])
 
+            # Order.cart를 rep_cart로 업데이트 (PROTECT FK로 인한 삭제 실패 방지)
+            other_cart_ids = [c.id for c in other_carts]
+            if rep_cart and other_cart_ids:
+                Order.objects.filter(cart_id__in=other_cart_ids).update(cart=rep_cart)
+
             # 나머지 other_usage_ids의 cart 삭제 (CartItem CASCADE, CartCouponApply는 이미 이전됨)
             Cart.objects.filter(table_usage_id__in=other_usage_ids).delete()
 
@@ -509,6 +522,10 @@ class TableService:
         # 8. 활성 TableUsage 통합 (대표 테이블로 병합)
         all_table_ids = [t.id for t in all_tables]
         TableService._merge_active_usages(all_table_ids, representative_table)
+
+        # 8-1. 활성 세션이 있으면 모든 병합 테이블 IN_USE로 업데이트
+        if TableUsage.objects.filter(table=representative_table, ended_at__isnull=True).exists():
+            Table.objects.filter(pk__in=all_table_ids).update(status=Table.Status.IN_USE)
 
         # 9. 새 그룹 생성 후 일괄 업데이트
         table_group = TableGroup.objects.create(representative_table=representative_table)

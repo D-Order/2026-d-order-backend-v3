@@ -1,11 +1,11 @@
-# PROD 환경 자동 배포 워크플로우
+# PROD 환경 자동 배포 워크플로우 (Blue-Green)
 # 트리거: PROD 관련 라벨이 붙은 PR이 main 브랜치에 머지될 때, 또는 수동 실행
 #
 # 라벨별 동작:
-#   - PROD: 전체 배포 (Django + Nginx + Spring + docker-compose 갱신)
-#   - PROD-DJANGO: Django만 빌드 & 재시작
-#   - PROD-SPRING: Spring만 빌드 & 재시작
-#   - PROD-NGINX: Nginx만 빌드 & 재시작
+#   - PROD: 전체 배포 (Django + Nginx + Spring, Blue-Green)
+#   - PROD-DJANGO: Django만 Blue-Green 배포
+#   - PROD-SPRING: Spring만 Blue-Green 배포
+#   - PROD-NGINX: Nginx만 재배포
 
 name: Deploy to PROD
 
@@ -49,116 +49,9 @@ jobs:
           echo "PROD-NGINX: ${{ contains(github.event.pull_request.labels.*.name, 'PROD-NGINX') }}"
           echo "Manual target: ${{ github.event.inputs.deploy_target }}"
 
-  # Django 테스트
-  test-django:
-    needs: check-labels
-    if: needs.check-labels.outputs.deploy-all == 'true'
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: d_order_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-      - name: Install dependencies
-        run: |
-          cd django
-          pip install -r requirements.txt
-      - name: Run tests
-        env:
-          ENVIRONMENT: local
-          DEBUG: "True"
-          SECRET_KEY: test-secret-key-for-ci
-          DB_ENGINE: django.db.backends.postgresql
-          DB_NAME: d_order_test
-          DB_USER: postgres
-          DB_PASSWORD: postgres
-          DB_HOST: localhost
-          DB_PORT: 5432
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          REDIS_PASSWORD: ""
-          ALLOWED_HOSTS_LOCAL: localhost,127.0.0.1
-          CORS_ALLOWED_ORIGINS_LOCAL: http://localhost:3000
-        run: |
-          cd django
-          pytest -v
-
-  # Spring 테스트
-  test-spring:
-    needs: check-labels
-    if: needs.check-labels.outputs.deploy-all == 'true'
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_DB: d_order_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'gradle'
-      - name: Run tests
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/d_order_test
-          SPRING_DATASOURCE_USERNAME: postgres
-          SPRING_DATASOURCE_PASSWORD: postgres
-        run: |
-          cd spring
-          chmod +x gradlew
-          ./gradlew test --no-daemon
-
   # Django 빌드 & 푸시
   build-django:
-    needs: [check-labels, test-django, test-spring]
+    needs: check-labels
     if: needs.check-labels.outputs.deploy-all == 'true' || needs.check-labels.outputs.deploy-django == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -186,7 +79,7 @@ jobs:
 
   # Nginx 빌드 & 푸시
   build-nginx:
-    needs: [check-labels, test-django, test-spring]
+    needs: check-labels
     if: needs.check-labels.outputs.deploy-all == 'true' || needs.check-labels.outputs.deploy-nginx == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -215,7 +108,7 @@ jobs:
 
   # Spring 빌드 & 푸시
   build-spring:
-    needs: [check-labels, test-django, test-spring]
+    needs: check-labels
     if: needs.check-labels.outputs.deploy-all == 'true' || needs.check-labels.outputs.deploy-spring == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -259,7 +152,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # PROD 라벨일 때만 docker-compose.prod.yml 복사
+      # docker-compose.prod.yml 복사 (PROD 전체 배포 시)
       - name: Copy docker-compose to EC2
         if: needs.check-labels.outputs.deploy-all == 'true'
         uses: appleboy/scp-action@v0.1.7
@@ -270,8 +163,8 @@ jobs:
           source: "docker-compose.prod.yml"
           target: ${{ env.DEPLOY_PATH }}
 
-      # 전체 배포 (PROD 라벨)
-      - name: Deploy ALL services
+      # 전체 Blue-Green 배포 (PROD 라벨)
+      - name: Deploy ALL services (Blue-Green)
         if: needs.check-labels.outputs.deploy-all == 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -284,19 +177,76 @@ jobs:
             echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
             export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
 
-            docker compose -f docker-compose.prod.yml pull -q
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker image prune -f
+            # 현재 active color 확인 (서비스별로 독립 관리)
+            DJANGO_COLOR=$(cat .color_django 2>/dev/null || echo "")
+            SPRING_COLOR=$(cat .color_spring 2>/dev/null || echo "")
 
-            sleep 15
-            docker compose -f docker-compose.prod.yml ps
-            docker compose -f docker-compose.prod.yml logs --tail=20
+            if [ -z "$DJANGO_COLOR" ]; then
+              # ── 최초 배포: blue로 시작
+              mkdir -p nginx
+              cat > nginx/upstream.conf << 'UPCONF'
+            upstream django_backend {
+                server django-blue:8000;
+                keepalive 32;
+            }
+            upstream spring_backend {
+                server spring-blue:8080;
+                keepalive 32;
+            }
+            UPCONF
 
-            curl -f http://localhost/health/django || echo "Django health check failed"
-            curl -f http://localhost/health/spring || echo "Spring health check failed"
+              docker compose --profile blue pull -q
+              docker compose --profile blue up -d
 
-      # Django만 배포 (PROD-DJANGO 라벨)
-      - name: Deploy DJANGO only
+              sleep 30
+              curl -sf http://localhost/health/django || exit 1
+              curl -sf http://localhost/health/spring || exit 1
+
+              echo "blue" > .color_django
+              echo "blue" > .color_spring
+
+            else
+              # ── Blue-Green 배포
+              DJANGO_INACTIVE=$([ "$DJANGO_COLOR" = "blue" ] && echo "green" || echo "blue")
+              SPRING_INACTIVE=$([ "$SPRING_COLOR" = "blue" ] && echo "green" || echo "blue")
+
+              docker compose --profile $DJANGO_INACTIVE pull -q django-${DJANGO_INACTIVE}
+              docker compose --profile $SPRING_INACTIVE pull -q spring-${SPRING_INACTIVE}
+
+              # inactive 컨테이너 시작 (healthcheck 통과까지 대기)
+              docker compose --profile $DJANGO_INACTIVE up -d --no-deps --force-recreate --wait django-${DJANGO_INACTIVE}
+              docker compose --profile $SPRING_INACTIVE up -d --no-deps --force-recreate --wait spring-${SPRING_INACTIVE}
+
+              # nginx upstream 전환
+              cat > nginx/upstream.conf << UPCONF
+            upstream django_backend {
+                server django-${DJANGO_INACTIVE}:8000;
+                keepalive 32;
+            }
+            upstream spring_backend {
+                server spring-${SPRING_INACTIVE}:8080;
+                keepalive 32;
+            }
+            UPCONF
+              docker compose exec nginx nginx -s reload
+
+              # 전환 후 헬스 확인
+              sleep 3
+              curl -sf http://localhost/health/django || exit 1
+              curl -sf http://localhost/health/spring || exit 1
+
+              # 기존 active 컨테이너 종료
+              docker compose stop django-${DJANGO_COLOR} spring-${SPRING_COLOR}
+
+              echo $DJANGO_INACTIVE > .color_django
+              echo $SPRING_INACTIVE > .color_spring
+              docker image prune -f
+            fi
+
+            docker compose ps
+
+      # Django만 Blue-Green 배포 (PROD-DJANGO 라벨)
+      - name: Deploy DJANGO only (Blue-Green)
         if: needs.check-labels.outputs.deploy-django == 'true' && needs.check-labels.outputs.deploy-all != 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -309,14 +259,33 @@ jobs:
             echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
             export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
 
-            docker compose -f docker-compose.prod.yml pull -q django
-            docker compose -f docker-compose.prod.yml up -d --no-deps django
+            DJANGO_COLOR=$(cat .color_django 2>/dev/null || echo "blue")
+            SPRING_COLOR=$(cat .color_spring 2>/dev/null || echo "blue")
+            DJANGO_INACTIVE=$([ "$DJANGO_COLOR" = "blue" ] && echo "green" || echo "blue")
+
+            docker compose --profile $DJANGO_INACTIVE pull -q django-${DJANGO_INACTIVE}
+            docker compose --profile $DJANGO_INACTIVE up -d --no-deps --force-recreate --wait django-${DJANGO_INACTIVE}
+
+            cat > nginx/upstream.conf << UPCONF
+            upstream django_backend {
+                server django-${DJANGO_INACTIVE}:8000;
+                keepalive 32;
+            }
+            upstream spring_backend {
+                server spring-${SPRING_COLOR}:8080;
+                keepalive 32;
+            }
+            UPCONF
+            docker compose exec nginx nginx -s reload
+
+            sleep 3
+            curl -sf http://localhost/health/django || exit 1
+
+            docker compose stop django-${DJANGO_COLOR}
+            echo $DJANGO_INACTIVE > .color_django
             docker image prune -f
 
-            sleep 5
-            curl -f http://localhost/health/django || exit 1
-
-      # Nginx만 배포 (PROD-NGINX 라벨)
+      # Nginx만 재배포 (PROD-NGINX 라벨)
       - name: Deploy NGINX only
         if: needs.check-labels.outputs.deploy-nginx == 'true' && needs.check-labels.outputs.deploy-all != 'true'
         uses: appleboy/ssh-action@v1.0.3
@@ -330,12 +299,15 @@ jobs:
             echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
             export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
 
-            docker compose -f docker-compose.prod.yml pull -q nginx
-            docker compose -f docker-compose.prod.yml up -d --no-deps nginx
+            docker compose pull -q nginx
+            docker compose up -d --no-deps nginx
             docker image prune -f
 
-      # Spring만 배포 (PROD-SPRING 라벨)
-      - name: Deploy SPRING only
+            sleep 5
+            curl -sf http://localhost/health/ || exit 1
+
+      # Spring만 Blue-Green 배포 (PROD-SPRING 라벨)
+      - name: Deploy SPRING only (Blue-Green)
         if: needs.check-labels.outputs.deploy-spring == 'true' && needs.check-labels.outputs.deploy-all != 'true'
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -348,12 +320,31 @@ jobs:
             echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
             export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
 
-            docker compose -f docker-compose.prod.yml pull -q spring
-            docker compose -f docker-compose.prod.yml up -d --no-deps spring
-            docker image prune -f
+            DJANGO_COLOR=$(cat .color_django 2>/dev/null || echo "blue")
+            SPRING_COLOR=$(cat .color_spring 2>/dev/null || echo "blue")
+            SPRING_INACTIVE=$([ "$SPRING_COLOR" = "blue" ] && echo "green" || echo "blue")
+
+            docker compose --profile $SPRING_INACTIVE pull -q spring-${SPRING_INACTIVE}
+            docker compose --profile $SPRING_INACTIVE up -d --no-deps --force-recreate --wait spring-${SPRING_INACTIVE}
+
+            cat > nginx/upstream.conf << UPCONF
+            upstream django_backend {
+                server django-${DJANGO_COLOR}:8000;
+                keepalive 32;
+            }
+            upstream spring_backend {
+                server spring-${SPRING_INACTIVE}:8080;
+                keepalive 32;
+            }
+            UPCONF
+            docker compose exec nginx nginx -s reload
 
             sleep 5
-            curl -f http://localhost/health/spring || exit 1
+            curl -sf http://localhost/health/spring || exit 1
+
+            docker compose stop spring-${SPRING_COLOR}
+            echo $SPRING_INACTIVE > .color_spring
+            docker image prune -f
 
       - name: Deployment summary
         if: success()

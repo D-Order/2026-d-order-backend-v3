@@ -527,6 +527,27 @@ class TableMergeTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_병합_후_모든_테이블_IN_USE(self):
+        """세션 있는 테이블 병합 후 모든 테이블이 IN_USE여야 함"""
+        from table.models import TableUsage
+        self.client.force_authenticate(user=self.user)
+        t1 = Table.objects.get(booth=self.booth, table_num=1)
+        t2 = Table.objects.get(booth=self.booth, table_num=2)
+        t3 = Table.objects.get(booth=self.booth, table_num=3)
+
+        # t2, t3만 IN_USE (t1은 ACTIVE)
+        TableUsage.objects.create(table=t2, started_at=now())
+        TableUsage.objects.create(table=t3, started_at=now())
+        t2.status = Table.Status.IN_USE
+        t2.save()
+        t3.status = Table.Status.IN_USE
+        t3.save()
+
+        self.client.post(MERGE_URL, {'table_nums': [1, 2, 3]}, format='json')
+
+        for table in Table.objects.filter(booth=self.booth, table_num__in=[1, 2, 3]):
+            self.assertEqual(table.status, Table.Status.IN_USE)
+
 
 @override_settings(STORAGES=IN_MEMORY_STORAGES)
 class TableEnterTestCase(APITestCase):
@@ -1164,3 +1185,25 @@ class MergeActiveUsagesTestCase(TestCase):
         self._call([self.t1, self.t2, self.t3])
         self.assertEqual(TableCoupon.objects.count(), 1)
         self.assertTrue(TableCoupon.objects.filter(table_usage=self._rep_usage(self.t1)).exists())
+
+    # ─── 회귀 테스트 ──────────────────────────────────────────────────────
+
+    def test_paid_order_있는_테이블_병합시_ProtectedError_없음(self):
+        """PAID 주문이 있는 테이블 병합 시 ProtectedError 없이 성공해야 함"""
+        from cart.models import Cart
+        self._usage(self.t1, minutes_ago=30)
+        usage2 = self._usage(self.t2, minutes_ago=20)
+        other_cart = Cart.objects.create(table_usage=usage2, cart_price=5000)
+        order = Order.objects.create(
+            table_usage=usage2,
+            cart=other_cart,
+            order_price=5000,
+            original_price=5000,
+            order_status='PAID',
+        )
+
+        self._call([self.t1, self.t2])
+
+        order.refresh_from_db()
+        rep_cart = Cart.objects.get(table_usage=self._rep_usage(self.t1))
+        self.assertEqual(order.cart, rep_cart)
