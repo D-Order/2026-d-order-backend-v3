@@ -26,8 +26,8 @@ public class ServingTaskService {
     // 1. 부스별 서빙 요청 리스트 조회
     @Transactional(readOnly = true)
     public List<ServingTask> getPendingServingCalls(Long boothId) {
-        // TODO: 향후 boothId 기준으로 필터링하는 쿼리로 고도화 필요
-        return servingTaskRepository.findAllByStatus(ServingStatus.SERVE_REQUESTED);
+        // 🌟 새로 만든 fetch join 메서드 호출
+        return servingTaskRepository.findAllByStatusWithOrderItem(ServingStatus.SERVE_REQUESTED);
     }
 
     // 2. 서빙 수락 (Catch)
