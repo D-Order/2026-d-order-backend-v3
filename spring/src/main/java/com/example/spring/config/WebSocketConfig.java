@@ -6,9 +6,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import org.springframework.web.socket.server.support.HttpSessionHandshakeInterceptor; // 1. 임포트 추가
 
 @Configuration
-@EnableWebSocket // 웹소켓 기능 켜기
+@EnableWebSocket
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketConfigurer {
 
@@ -16,8 +17,15 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        // 프론트엔드가 접속할 주소를 열어줍니다: ws://localhost:8080/ws/serving
         registry.addHandler(servingWebSocketHandler, "/ws/serving")
-                .setAllowedOrigins("*"); // 지금은 테스트를 위해 모두 허용 (실전엔 프론트 도메인만)
+                // 1. 허용 도메인을 명확하게 지정 (패턴 사용)
+                .setAllowedOriginPatterns(
+                        "http://localhost:5173",
+                        "https://dev.dorder-api.shop",
+                        "http://dev.dorder-api.shop",
+                        "https://*.dorder-api.shop" // 서브도메인 대비 안전장치
+                )
+                // 2. HTTP 세션 및 쿠키 정보를 웹소켓 핸드셰이크 시점에 유지해주는 인터셉터
+                .addInterceptors(new HttpSessionHandshakeInterceptor());
     }
 }

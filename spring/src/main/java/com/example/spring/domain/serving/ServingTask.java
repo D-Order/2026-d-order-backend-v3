@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "`ServingTask`")
+@Table(name = "serving_task")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ServingTask {
@@ -16,7 +16,7 @@ public class ServingTask {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "orderitem", nullable = false)
+    @JoinColumn(name = "orderitem", nullable = false) // 🌟 중요: DB 실제 컬럼명이 orderitem 입니다.
     private OrderItem orderItem;
 
     @Enumerated(EnumType.STRING)
@@ -41,7 +41,7 @@ public class ServingTask {
     @Column(name = "catched_by")
     private String catchedBy;
 
-    @Column(name = "`Key`", nullable = false, length = 255)
+    @Column(name = "key", nullable = false, length = 255) // 소문자 key
     private String key;
 
     @Builder
