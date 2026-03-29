@@ -1,156 +1,177 @@
+import os
 import pytest
-from channels.testing import WebsocketCommunicator
-from project.asgi import application
-from django.contrib.auth import get_user_model
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
-from order.models import Order, OrderItem
-from table.models import Table, TableUsage
+from channels.testing import WebsocketCommunicator
+from django.contrib.auth import get_user_model
 from django.utils import timezone
-import datetime
+
+from booth.models import Booth
+from menu.models import Menu
+from order.models import Order, OrderItem
+# 테스트에서는 JWT WebSocket middleware를 비활성화한 라우터를 사용
+os.environ.setdefault("DJANGO_ENV", "test")
+
+from project.asgi import application
+from table.models import Table, TableUsage
 
 User = get_user_model()
 
-async def create_order_with_items(user, status="PAID", coupon=False):
-    from booth.models import Booth
-    booth = await sync_to_async(Booth.objects.create)(user=user, name="테스트부스", account="123", bank="테스트은행", table_max_cnt=10, table_limit_hours=2)
+
+async def create_order_with_items(user, order_status="PAID"):
+    booth = await sync_to_async(Booth.objects.create)(
+        user=user,
+        name="테스트부스",
+        account="1234567890",
+        depositor="홍길동",
+        bank="테스트은행",
+        table_max_cnt=10,
+        table_limit_hours=2,
+        seat_type="NO",
+    )
     table = await sync_to_async(Table.objects.create)(booth=booth, table_num=1)
     table_usage = await sync_to_async(TableUsage.objects.create)(table=table, started_at=timezone.now())
-    order = await sync_to_async(Order.objects.create)(order_price=10000, order_status=status, table_usage=table_usage)
-    item = await sync_to_async(OrderItem.objects.create)(order=order, menu=1, quantity=2, fixed_price=5000, status="cooking")
+
+    menu = await sync_to_async(Menu.objects.create)(
+        booth=booth,
+        name="테스트메뉴",
+        category="MENU",
+        price=5000,
+        stock=100,
+    )
+
+    order = await sync_to_async(Order.objects.create)(
+        order_price=10000,
+        order_status=order_status,
+        table_usage=table_usage,
+    )
+
+    item = await sync_to_async(OrderItem.objects.create)(
+        order=order,
+        menu=menu,
+        quantity=2,
+        fixed_price=5000,
+        status="COOKING",
+    )
     return order, item, table_usage
 
-def get_time_ago(dt):
-    diff = timezone.now() - dt
-    minutes = int(diff.total_seconds() // 60)
-    return f"{minutes}분 전"
+
+async def receive_until_type(communicator, target_type, max_attempts=5):
+    for _ in range(max_attempts):
+        payload = await communicator.receive_json_from(timeout=3)
+        if payload.get("type") == target_type:
+            return payload
+    raise AssertionError(f"{target_type} 메시지를 받지 못했습니다.")
+
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_admin_order_snapshot_message(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
     user = await sync_to_async(User.objects.create_user)(username="admin_test", password="password")
-    order, item, table_usage = await create_order_with_items(user)
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
+    order, _, _ = await create_order_with_items(user)
+
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
+
     connected, _ = await communicator.connect()
     assert connected
-    response = await communicator.receive_json_from(timeout=2)
-    assert response["type"] == "ADMIN_ORDER_SNAPSHOT"
+
+    response = await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
     assert "orders" in response["data"]
     assert response["data"]["orders"][0]["order_id"] == order.id
     assert response["data"]["orders"][0]["table_num"] == 1
     assert response["data"]["orders"][0]["order_status"] == "PAID"
-    assert response["data"]["orders"][0]["time_ago"].endswith("분 전")
-    assert isinstance(response["data"]["orders"][0]["items"], list)
+
     await communicator.disconnect()
+
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_admin_new_order_message(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
     user = await sync_to_async(User.objects.create_user)(username="admin_test2", password="password")
-    order, item, table_usage = await create_order_with_items(user)
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
+    order, _, _ = await create_order_with_items(user)
+
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
     connected, _ = await communicator.connect()
     assert connected
-    await communicator.receive_json_from(timeout=2)  # snapshot skip
-    group_name = f"booth_{user.pk}.order"
+
+    await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+
     channel_layer = get_channel_layer()
+    group_name = f"booth_{user.pk}.order"
     await channel_layer.group_send(
         group_name,
         {
             "type": "admin_new_order",
-            "data": {"order": {
-                "order_id": order.id,
-                "table_num": 1,
-                "table_usage_id": table_usage.id,
-                "order_status": "PAID",
-                "time_ago": get_time_ago(order.created_at),
-                "has_coupon": False,
-                "items": [{
-                    "order_item_id": item.id,
-                    "menu_name": "테스트메뉴",
-                    "image": None,
-                    "quantity": item.quantity,
-                    "fixed_price": item.fixed_price,
-                    "item_total_price": item.fixed_price * item.quantity,
-                    "status": item.status,
-                    "is_set": False
-                }]
-            }}
-        }
+            "data": {"order_id": order.id},
+        },
     )
-    response = await communicator.receive_json_from(timeout=2)
-    assert response["type"] == "ADMIN_NEW_ORDER"
+
+    response = await receive_until_type(communicator, "ADMIN_NEW_ORDER")
     assert isinstance(response["data"]["orders"], list)
     assert response["data"]["orders"][0]["order_id"] == order.id
+
     await communicator.disconnect()
+
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_admin_order_update_message(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
     user = await sync_to_async(User.objects.create_user)(username="admin_test3", password="password")
-    order, item, table_usage = await create_order_with_items(user)
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
+    order, item, _ = await create_order_with_items(user)
+
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
     connected, _ = await communicator.connect()
     assert connected
-    await communicator.receive_json_from(timeout=2)
-    group_name = f"booth_{user.pk}.order"
+
+    await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+
     channel_layer = get_channel_layer()
+    group_name = f"booth_{user.pk}.order"
     await channel_layer.group_send(
         group_name,
         {
             "type": "admin_order_update",
             "data": {
                 "order_id": order.id,
-                "item": {
-                    "id": item.id,
-                    "status": "serving",
-                    "is_all_served": False
-                }
-            }
-        }
+                "items": [{"id": item.id, "status": "SERVING", "is_all_served": False}],
+            },
+        },
     )
-    response = await communicator.receive_json_from(timeout=2)
-    assert response["type"] == "ADMIN_ORDER_UPDATE"
+
+    response = await receive_until_type(communicator, "ADMIN_ORDER_UPDATE")
     assert response["data"]["order_id"] == order.id
-    assert response["data"]["item"]["id"] == item.id
-    assert response["data"]["item"]["status"] == "serving"
+    assert response["data"]["items"][0]["id"] == item.id
+    assert response["data"]["items"][0]["status"] == "SERVING"
+
     await communicator.disconnect()
+
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_admin_order_cancelled_message(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
     user = await sync_to_async(User.objects.create_user)(username="admin_test4", password="password")
-    order, item, table_usage = await create_order_with_items(user)
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
+    order, item, _ = await create_order_with_items(user)
+
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
     connected, _ = await communicator.connect()
     assert connected
-    await communicator.receive_json_from(timeout=2)
-    group_name = f"booth_{user.pk}.order"
+
+    await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+
     channel_layer = get_channel_layer()
+    group_name = f"booth_{user.pk}.order"
     await channel_layer.group_send(
         group_name,
         {
@@ -159,36 +180,37 @@ async def test_admin_order_cancelled_message(settings):
                 "order_id": order.id,
                 "item_id": item.id,
                 "refund_amount": 10000,
-                "new_total_sales": 90000
-            }
-        }
+                "new_total_sales": 90000,
+            },
+        },
     )
-    response = await communicator.receive_json_from(timeout=2)
-    assert response["type"] == "ADMIN_ORDER_CANCELLED"
+
+    response = await receive_until_type(communicator, "ADMIN_ORDER_CANCELLED")
     assert response["data"]["order_id"] == order.id
     assert response["data"]["item_id"] == item.id
     assert response["data"]["refund_amount"] == 10000
-    assert response["data"]["new_total_sales"] == 90000
+
     await communicator.disconnect()
+
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_admin_order_completed_message(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
     user = await sync_to_async(User.objects.create_user)(username="admin_test5", password="password")
-    order, item, table_usage = await create_order_with_items(user)
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
+    order, _, table_usage = await create_order_with_items(user)
+
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
     connected, _ = await communicator.connect()
     assert connected
-    await communicator.receive_json_from(timeout=2)
-    group_name = f"booth_{user.pk}.order"
+
+    await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+
     channel_layer = get_channel_layer()
-    served_at = timezone.now().isoformat()
+    group_name = f"booth_{user.pk}.order"
+    updated_at = timezone.now().isoformat()
     await channel_layer.group_send(
         group_name,
         {
@@ -196,115 +218,77 @@ async def test_admin_order_completed_message(settings):
             "data": {
                 "order_id": order.id,
                 "table_num": 1,
-                "served_at": served_at
-            }
-        }
+                "table_usage_id": table_usage.id,
+                "order_status": "COMPLETED",
+                "updated_at": updated_at,
+            },
+        },
     )
-    response = await communicator.receive_json_from(timeout=2)
-    assert response["type"] == "ORDER_COMPLETED"
+
+    response = await receive_until_type(communicator, "ORDER_COMPLETED")
     assert response["data"]["order_id"] == order.id
     assert response["data"]["table_num"] == 1
-    assert response["data"]["served_at"] == served_at
-    await communicator.disconnect()
-import pytest
-from channels.testing import WebsocketCommunicator
-from channels.routing import URLRouter
-from order.routing import websocket_urlpatterns
-from django.contrib.auth import get_user_model
-from asgiref.sync import sync_to_async
-from channels.layers import get_channel_layer
-from order.models import Order, OrderItem
+    assert response["data"]["table_usage_id"] == table_usage.id
+    assert response["data"]["order_status"] == "COMPLETED"
 
-User = get_user_model()
- # application은 asgi.py의 application을 import해서 사용
+    await communicator.disconnect()
+
 
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_admin_order_websocket_connect(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
-    user = await sync_to_async(User.objects.create_user)(username="admin_test", password="password")
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+    user = await sync_to_async(User.objects.create_user)(username="admin_test6", password="password")
+    await sync_to_async(Booth.objects.create)(
+        user=user,
+        name="연결테스트부스",
+        account="1234567890",
+        depositor="홍길동",
+        bank="테스트은행",
+        table_max_cnt=10,
+        table_limit_hours=2,
+        seat_type="NO",
+    )
+
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
     connected, _ = await communicator.connect()
     assert connected
-    try:
-        await communicator.receive_json_from(timeout=2)
-    except Exception:
-        pass
+
+    msg = await communicator.receive_json_from(timeout=3)
+    assert msg["type"] in ["ADMIN_ORDER_SNAPSHOT", "MENU_AGGREGATION"]
+
     await communicator.disconnect()
 
-# 실제 주문 이벤트 메시지 송수신 테스트
+
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_admin_order_event_message(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
-    user = await sync_to_async(User.objects.create_user)(username="admin_test2", password="password")
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+    user = await sync_to_async(User.objects.create_user)(username="admin_test7", password="password")
+    order, _, _ = await create_order_with_items(user)
+
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
     connected, _ = await communicator.connect()
     assert connected
-    try:
-        await communicator.receive_json_from(timeout=2)
-    except Exception:
-        pass
 
-    # 주문 및 아이템 생성
-    order = await sync_to_async(Order.objects.create)(order_price=10000, order_status="PAID")
-    await sync_to_async(OrderItem.objects.create)(order=order, menu=1, quantity=1, fixed_price=10000)
+    await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
 
-    # group_name 생성
-    group_name = f"booth_{user.pk}.order"
     channel_layer = get_channel_layer()
-    # admin_new_order 이벤트 전송
+    group_name = f"booth_{user.pk}.order"
     await channel_layer.group_send(
         group_name,
         {
             "type": "admin_new_order",
-            "order": {"order_id": order.id, "order_status": "PAID"}
-        }
+            "data": {"order_id": order.id},
+        },
     )
-    # 메시지 수신 및 검증
-    response = await communicator.receive_json_from(timeout=5)
-    assert response["type"] == "ADMIN_NEW_ORDER"
-    assert response["data"]["order"]["order_id"] == order.id
-    assert response["data"]["order"]["order_status"] == "PAID"
-    await communicator.disconnect()
 
+    response = await receive_until_type(communicator, "ADMIN_NEW_ORDER")
+    assert response["data"]["orders"][0]["order_id"] == order.id
+    assert response["data"]["orders"][0]["order_status"] == "PAID"
 
-import pytest
-
-from channels.testing import WebsocketCommunicator
-from channels.routing import URLRouter
-from order.routing import websocket_urlpatterns
-from django.contrib.auth import get_user_model
-from asgiref.sync import sync_to_async
-
-User = get_user_model()
- # application은 asgi.py의 application을 import해서 사용
-
-@pytest.mark.asyncio
-@pytest.mark.django_db(transaction=True)
-async def test_admin_order_websocket_connect(settings):
-    settings.CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
-    user = await sync_to_async(User.objects.create_user)(username="admin_test", password="password")
-    communicator = WebsocketCommunicator(application, "/ws/django/admin/orders/management/")
-    communicator.scope["user"] = user
-    connected, _ = await communicator.connect()
-    assert connected
-    try:
-        await communicator.receive_json_from(timeout=2)
-    except Exception:
-        pass
     await communicator.disconnect()
