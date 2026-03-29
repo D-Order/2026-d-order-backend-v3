@@ -196,9 +196,8 @@ jobs:
             UPCONF
 
               docker compose -f docker-compose.prod.yml --profile blue pull -q
-              docker compose -f docker-compose.prod.yml --profile blue up -d
+              docker compose -f docker-compose.prod.yml --profile blue up -d --wait --wait-timeout 300
 
-              sleep 30
               curl -sf http://localhost/health/django || exit 1
               curl -sf http://localhost/health/spring || exit 1
 
@@ -243,7 +242,7 @@ jobs:
               docker image prune -f
             fi
 
-            docker compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.prod.yml --profile blue ps
 
       # Django만 Blue-Green 배포 (PROD-DJANGO 라벨)
       - name: Deploy DJANGO only (Blue-Green)

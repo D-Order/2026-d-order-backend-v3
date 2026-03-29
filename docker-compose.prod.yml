@@ -159,6 +159,7 @@ services:
     image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
     container_name: d-order-spring-blue-prod
     profiles: ['blue']
+    command: []
     environment:
       SPRING_PROFILES_ACTIVE: prod
       POSTGRES_DB: ${POSTGRES_DB}
@@ -197,6 +198,7 @@ services:
     image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
     container_name: d-order-spring-green-prod
     profiles: ['green']
+    command: []
     environment:
       SPRING_PROFILES_ACTIVE: prod
       POSTGRES_DB: ${POSTGRES_DB}

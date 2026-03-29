@@ -60,7 +60,12 @@ def get_allowed_hosts():
     else:  # IS_PRODUCTION
         hosts_str = env('ALLOWED_HOSTS_PRODUCTION')
 
-    return [host.strip() for host in hosts_str.split(',')]
+    hosts = [host.strip() for host in hosts_str.split(',')]
+    # Docker 내부 healthcheck는 localhost로 요청하므로 항상 포함
+    for h in ['localhost', '127.0.0.1']:
+        if h not in hosts:
+            hosts.append(h)
+    return hosts
 
 ALLOWED_HOSTS = get_allowed_hosts() 
 
