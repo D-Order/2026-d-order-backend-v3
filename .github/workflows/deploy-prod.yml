@@ -242,7 +242,7 @@ jobs:
               docker image prune -f
             fi
 
-            docker compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.prod.yml --profile blue ps
 
       # Django만 Blue-Green 배포 (PROD-DJANGO 라벨)
       - name: Deploy DJANGO only (Blue-Green)
