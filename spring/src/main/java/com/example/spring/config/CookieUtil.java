@@ -29,6 +29,7 @@ public class CookieUtil {
                 .httpOnly(jwtProperties.getCookie().isHttpOnly())
                 .sameSite(jwtProperties.getCookie().getSameSite())
                 .secure(jwtProperties.getCookie().isSecure())
+                .domain(jwtProperties.getCookie().getDomain())
                 .path("/")
                 .build();
 
@@ -41,6 +42,7 @@ public class CookieUtil {
                 .httpOnly(jwtProperties.getCookie().isHttpOnly())
                 .sameSite(jwtProperties.getCookie().getSameSite())
                 .secure(jwtProperties.getCookie().isSecure())
+                .domain(jwtProperties.getCookie().getDomain())
                 .path("/")
                 .build();
 
@@ -61,6 +63,7 @@ public class CookieUtil {
                 .httpOnly(jwtProperties.getCookie().isHttpOnly())
                 .sameSite(jwtProperties.getCookie().getSameSite())
                 .secure(jwtProperties.getCookie().isSecure())
+                .domain(jwtProperties.getCookie().getDomain())
                 .path("/")
                 .build();
 
@@ -73,6 +76,7 @@ public class CookieUtil {
                 .httpOnly(jwtProperties.getCookie().isHttpOnly())
                 .sameSite(jwtProperties.getCookie().getSameSite())
                 .secure(jwtProperties.getCookie().isSecure())
+                .domain(jwtProperties.getCookie().getDomain())
                 .path("/")
                 .build();
 
