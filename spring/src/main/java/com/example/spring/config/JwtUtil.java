@@ -82,14 +82,27 @@ public class JwtUtil {
      */
     public Long getBoothIdFromToken(String token) {
         Claims claims = parseClaims(token);
+        // Django SimpleJWT 기본 클레임은 user_id — 이 프로젝트는 Booth.pk == User.pk 이므로 동일
         Object boothIdObj = claims.get("booth_id");
+        if (boothIdObj == null) {
+            boothIdObj = claims.get("user_id");
+        }
         if (boothIdObj instanceof String) {
             return Long.valueOf((String) boothIdObj);
         } else if (boothIdObj instanceof Number) {
             return ((Number) boothIdObj).longValue();
         } else {
-            throw new IllegalArgumentException("booth_id claim 타입 변환 실패: " + boothIdObj);
+            throw new IllegalArgumentException("booth_id/user_id claim 없음 또는 타입 변환 실패: " + boothIdObj);
         }
+    }
+
+    /**
+     * SimpleJWT 호환 username 클레임 (직원 호출 수락 시 accepted_by 등)
+     */
+    public String getUsernameFromToken(String token) {
+        Claims claims = parseClaims(token);
+        Object username = claims.get("username");
+        return username != null ? username.toString() : null;
     }
 
     
