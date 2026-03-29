@@ -9,6 +9,7 @@ class Menu(models.Model):
     class Category(models.TextChoices):
         MENU = 'MENU', '메뉴'
         DRINK = 'DRINK', '음료'
+        FEE = 'FEE', '이용료'
     
     booth = models.ForeignKey(
         Booth,

@@ -23,7 +23,7 @@ def add_to_cart(*, table_usage_id: int, type: str, quantity: int, menu_id: int =
             status_code=409,
         )
 
-    if type == "menu":
+    if type == "menu" or type == "fee":
         if not menu_id:
             raise CartError("menu_id가 필요합니다.", "INVALID_MENU_ID", status_code=400)
 
@@ -72,7 +72,7 @@ def add_to_cart(*, table_usage_id: int, type: str, quantity: int, menu_id: int =
             item.save(update_fields=["quantity", "price_at_cart"])
 
     else:
-        raise CartError("type은 menu 또는 setmenu여야 합니다.", "INVALID_TYPE", status_code=400)
+        raise CartError("type은 menu, fee 또는 setmenu여야 합니다.", "INVALID_TYPE", status_code=400)
 
     recalc_cart_price(cart)
     item.refresh_from_db()
