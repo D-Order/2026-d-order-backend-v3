@@ -24,18 +24,15 @@ def error_response(e: CouponError):
 
 
 def get_admin_booth(request) -> Booth:
-    if not request.user.is_staff:
-        raise CouponError("권한이 없습니다.", error_code="FORBIDDEN", detail="admin only", status_code=403)
-
-    try:
-        return request.user.booth
-    except Booth.DoesNotExist:
+    booth = getattr(request.user, "booth", None)
+    if not booth:
         raise CouponError(
             "운영자 부스 정보를 찾을 수 없습니다.",
             error_code="BOOTH_NOT_FOUND",
             detail="user has no booth mapped",
             status_code=404,
         )
+    return booth
 
 
 # 운영자용: 쿠폰 목록/등록
