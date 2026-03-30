@@ -60,8 +60,6 @@ def create_coupon_and_codes(
     discount_value: Decimal,
     quantity: int,
 ) -> Coupon:
-    # 변경
-    # created 변수가 없던거 수정
 
     if quantity < 1:
         raise CouponError("quantity는 1 이상이어야 합니다.", "VALIDATION_ERROR", status_code=400)
@@ -133,8 +131,6 @@ def apply_coupon_code(*, table_usage_id: int, coupon_code_str: str):
     discount_amount = _calc_discount(subtotal, code.coupon.discount_type, code.coupon.discount_value)
     total = subtotal - discount_amount
 
-    # 변경 이유
-    # apply는 “예약”이고, 실제 사용(used_at)은 결제 확정(주문 생성) 시점에 찍어야 함
     CartCouponApply.objects.create(cart=cart, round=cart.round, coupon_code=code)
 
     return {
@@ -171,8 +167,6 @@ def cancel_coupon_apply(*, table_usage_id: int):
     if not applied:
         raise CouponError("적용된 쿠폰이 없습니다.", "COUPON_NOT_APPLIED", status_code=400)
 
-    # 변경
-    # apply/cancel은 “예약” 상태만 변경. used_at은 결제 확정 단계에서만 변경해야 함
     applied.delete()
 
     subtotal = recalc_cart_price(cart)
@@ -205,7 +199,6 @@ def build_coupon_excel_for_booth(*, booth: Booth) -> bytes:
     for coupon in coupons:
         codes = coupon.codes.all().order_by("created_at")
 
-        # 코드가 없는 쿠폰도 한 줄은 보이게 바꿈
         if not codes.exists():
             ws.append([
                 coupon.name,
@@ -237,3 +230,63 @@ def build_coupon_excel_for_booth(*, booth: Booth) -> bytes:
     wb.save(stream)
     stream.seek(0)
     return stream.getvalue()
+
+def get_coupon_detail_with_codes(*, booth: Booth, coupon_id: int, status: str = "ALL"):
+    coupon = get_object_or_404(
+        Coupon.objects.filter(booth=booth).annotate(
+            used_count=Count("codes", filter=Q(codes__used_at__isnull=False))
+        ),
+        id=coupon_id,
+    )
+
+    code_qs = coupon.codes.all().order_by("created_at", "id")
+
+    status = (status or "ALL").upper()
+    if status == "USED":
+        code_qs = code_qs.filter(used_at__isnull=False)
+    elif status == "UNUSED":
+        code_qs = code_qs.filter(used_at__isnull=True)
+    elif status != "ALL":
+        raise CouponError(
+            "status 값이 올바르지 않습니다.",
+            error_code="INVALID_STATUS",
+            detail="status must be one of ALL, USED, UNUSED",
+            status_code=400,
+        )
+
+    used_count = coupon.used_count or 0
+    unused_count = max(0, coupon.quantity - used_count)
+
+    if coupon.discount_type == Coupon.DiscountType.RATE:
+        display_discount_value = float(coupon.discount_value) * 100
+    else:
+        display_discount_value = float(coupon.discount_value)
+
+    coupon_data = {
+        "coupon_id": coupon.id,
+        "name": coupon.name,
+        "description": coupon.description,
+        "discount_type": coupon.discount_type,
+        "discount_value": float(coupon.discount_value),
+        "display_discount_value": display_discount_value,
+        "quantity": coupon.quantity,
+        "used_count": used_count,
+        "unused_count": unused_count,
+        "created_at": coupon.created_at,
+    }
+
+    codes_data = [
+        {
+            "coupon_code_id": code.id,
+            "code": code.code,
+            "is_used": code.used_at is not None,
+            "used_at": code.used_at,
+            "created_at": code.created_at,
+        }
+        for code in code_qs
+    ]
+
+    return {
+        "coupon": coupon_data,
+        "codes": codes_data,
+    }
