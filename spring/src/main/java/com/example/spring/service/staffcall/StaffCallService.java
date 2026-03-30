@@ -73,7 +73,11 @@ public class StaffCallService {
         sc.accept(acceptedBy);
 
         publishRedis(sc, "staff_call_accepted");
-        staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
+        try {
+            staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
+        } catch (Exception e) {
+            log.error("[staffcall accept] 스냅샷 조회/WS 푸시 실패 — 수락은 반영됨 boothId={}", boothId, e);
+        }
 
         return StaffCallAcceptResponse.builder()
                 .tableId(sc.getTableId())
@@ -126,7 +130,11 @@ public class StaffCallService {
         staffCallRepository.save(sc);
 
         publishRedis(sc, "staff_call_created");
-        staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
+        try {
+            staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
+        } catch (Exception e) {
+            log.error("[staffcall emit] 스냅샷 조회/WS 푸시 실패 — 호출 저장은 완료됨 boothId={}", boothId, e);
+        }
 
         Map<String, Object> out = new HashMap<>();
         out.put("message", "직원 호출이 등록되었습니다.");
