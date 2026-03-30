@@ -37,3 +37,32 @@ class CouponApplySerializer(serializers.Serializer):
 
 class CouponCancelSerializer(serializers.Serializer):
     table_usage_id = serializers.IntegerField()
+    
+class CouponCodeDetailSerializer(serializers.ModelSerializer):
+    coupon_code_id = serializers.IntegerField(source="id", read_only=True)
+    is_used = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CouponCode
+        fields = ["coupon_code_id", "code", "is_used", "used_at", "created_at"]
+
+    def get_is_used(self, obj):
+        return obj.used_at is not None
+
+
+class CouponDetailSerializer(serializers.Serializer):
+    coupon_id = serializers.IntegerField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_null=True, allow_blank=True)
+    discount_type = serializers.CharField()
+    discount_value = serializers.FloatField()
+    display_discount_value = serializers.FloatField()
+    quantity = serializers.IntegerField()
+    used_count = serializers.IntegerField()
+    unused_count = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+
+
+class CouponDetailResponseSerializer(serializers.Serializer):
+    coupon = CouponDetailSerializer()
+    codes = CouponCodeDetailSerializer(many=True)

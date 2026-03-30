@@ -205,3 +205,26 @@ class CouponApplyAPIView(APIView):
         )
         
         return Response({"message": "쿠폰 적용이 취소되었습니다", "data": result}, status=200)
+    
+class CouponDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, coupon_id: int):
+        try:
+            booth = get_admin_booth(request)
+            status = request.query_params.get("status", "ALL")
+            result = get_coupon_detail_with_codes(
+                booth=booth,
+                coupon_id=coupon_id,
+                status=status,
+            )
+        except CouponError as e:
+            return error_response(e)
+
+        return Response(
+            {
+                "message": "쿠폰 상세 조회에 성공했습니다.",
+                "data": result,
+            },
+            status=200,
+        )
