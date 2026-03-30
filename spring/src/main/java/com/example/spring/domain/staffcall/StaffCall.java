@@ -40,6 +40,9 @@ public class StaffCall {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
+
     @Column(name = "accepted_at")
     private LocalDateTime acceptedAt;
 
@@ -62,11 +65,13 @@ public class StaffCall {
         this.category = category;
         this.status = StaffCallStatus.PENDING;
         this.createdAt = LocalDateTime.now();
+        this.updatedAt = this.createdAt;
     }
 
     public void accept(String acceptedBy) {
         this.status = StaffCallStatus.ACCEPTED;
         this.acceptedAt = LocalDateTime.now();
         this.acceptedBy = acceptedBy;
+        this.updatedAt = this.acceptedAt;
     }
 }
