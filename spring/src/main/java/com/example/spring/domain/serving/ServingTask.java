@@ -1,6 +1,5 @@
 package com.example.spring.domain.serving;
 
-import com.example.spring.domain.orderitem.OrderItem;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -15,9 +14,8 @@ public class ServingTask {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "orderitem", nullable = false) // 🌟 중요: DB 실제 컬럼명이 orderitem 입니다.
-    private OrderItem orderItem;
+    @Column(name = "orderitem", nullable = false)
+    private Long orderItemId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
@@ -45,8 +43,8 @@ public class ServingTask {
     private String key;
 
     @Builder
-    public ServingTask(OrderItem orderItem, String key) {
-        this.orderItem = orderItem;
+    public ServingTask(Long orderItemId, String key) {
+        this.orderItemId = orderItemId;
         this.status = ServingStatus.SERVE_REQUESTED;
         this.key = key;
         this.createdAt = LocalDateTime.now();
