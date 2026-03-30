@@ -23,7 +23,7 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
 
     @Query(value = """
             SELECT sc.id, sc.booth_id, sc.table_id, sc.cart_id, sc.call_type, sc.category,
-                   sc.status, sc.created_at, sc.updated_at, sc.accepted_at, sc.accepted_by, sc.completed_at, sc.version
+                   sc.status, sc.created_at, sc.accepted_at, sc.accepted_by, sc.completed_at, sc.version
             FROM staff_call sc
             INNER JOIN table_table t ON sc.table_id = t.id
             WHERE sc.booth_id = :boothId AND t.booth_id = :boothId

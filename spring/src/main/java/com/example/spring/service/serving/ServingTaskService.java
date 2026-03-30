@@ -26,8 +26,7 @@ public class ServingTaskService {
     // 1. 부스별 서빙 요청 리스트 조회
     @Transactional(readOnly = true)
     public List<ServingTask> getPendingServingCalls(Long boothId) {
-        // 🌟 새로 만든 fetch join 메서드 호출
-        return servingTaskRepository.findAllByStatusWithOrderItem(ServingStatus.SERVE_REQUESTED);
+        return servingTaskRepository.findAllByStatus(ServingStatus.SERVE_REQUESTED);
     }
 
     // 2. 서빙 수락 (Catch)
@@ -39,7 +38,7 @@ public class ServingTaskService {
         task.acceptServing(catchedBy); // 상태 변경 (SERVING)
 
         // 장고로 상태 변경 메시지 발행
-        publishToDjango(boothId, "serving", task.getOrderItem().getId(), catchedBy);
+        publishToDjango(boothId, "serving", task.getOrderItemId(), catchedBy);
     }
 
     // 3. 서빙 완료
@@ -48,7 +47,7 @@ public class ServingTaskService {
         ServingTask task = servingTaskRepository.findById(taskId).orElseThrow();
         task.completeServing(); // 상태 변경 (SERVED)
 
-        publishToDjango(boothId, "served", task.getOrderItem().getId(), null);
+        publishToDjango(boothId, "served", task.getOrderItemId(), null);
     }
 
     // 4. 서빙 수락 취소
@@ -58,7 +57,7 @@ public class ServingTaskService {
         task.cancelServing(); // 상태 변경 (SERVE_REQUESTED 롤백)
 
         // 장고 측 OrderItem 상태도 다시 cooked로 롤백
-        publishToDjango(boothId, "cooked", task.getOrderItem().getId(), null);
+        publishToDjango(boothId, "cooked", task.getOrderItemId(), null);
     }
 
     // 장고가 구독 중인 채널로 Redis 메시지 발행

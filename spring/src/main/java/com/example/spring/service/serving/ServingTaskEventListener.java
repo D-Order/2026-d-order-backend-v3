@@ -1,6 +1,5 @@
 package com.example.spring.service.serving;
 
-import com.example.spring.domain.orderitem.OrderItem;
 import com.example.spring.domain.serving.ServingTask;
 import com.example.spring.dto.redis.OrderCookedMessageDto;
 import com.example.spring.dto.serving.response.ServingTaskResponse;
@@ -37,11 +36,11 @@ public class ServingTaskEventListener {
             try {
                 OrderCookedMessageDto dto = objectMapper.readValue(message, OrderCookedMessageDto.class);
 
-                OrderItem orderItem = orderItemRepository.findById(dto.getOrderItemId())
+                orderItemRepository.findById(dto.getOrderItemId())
                         .orElseThrow(() -> new IllegalArgumentException("OrderItem not found"));
 
                 ServingTask servingTask = ServingTask.builder()
-                        .orderItem(orderItem)
+                        .orderItemId(dto.getOrderItemId())
                         .key(UUID.randomUUID().toString())
                         .build();
 

@@ -48,7 +48,7 @@ public class StaffCallService {
     private StaffCallWebSocketHandler staffCallWebSocketHandler;
 
     @Transactional
-    public StaffCallAcceptResponse accept(StaffCallAcceptRequest req, String accessToken) {
+    public StaffCallAcceptResponse accept(Long boothId, String accessToken, StaffCallAcceptRequest req) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type은 필수입니다.");
         }
@@ -57,15 +57,15 @@ public class StaffCallService {
                 .findByTableCartCallTypeForUpdate(req.getTableId(), req.getCartId(), req.getCallType())
                 .orElseThrow(() -> new IllegalArgumentException("해당 호출을 찾을 수 없습니다."));
 
-        Long boothId = sc.getBoothId();
+        if (!boothId.equals(sc.getBoothId())) {
+            throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
+        }
 
         if (sc.getStatus() != StaffCallStatus.PENDING) {
             throw new StaffCallConflictException("이미 처리된 요청입니다.");
         }
 
-        String acceptedBy = (accessToken != null && jwtUtil.validateToken(accessToken))
-                ? jwtUtil.getUsernameFromToken(accessToken)
-                : null;
+        String acceptedBy = jwtUtil.getUsernameFromToken(accessToken);
         if (acceptedBy == null || acceptedBy.isBlank()) {
             acceptedBy = "unknown";
         }
@@ -73,11 +73,7 @@ public class StaffCallService {
         sc.accept(acceptedBy);
 
         publishRedis(sc, "staff_call_accepted");
-        try {
-            staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
-        } catch (Exception e) {
-            log.error("[staffcall accept] 스냅샷 조회/WS 푸시 실패 — 수락은 반영됨 boothId={}", boothId, e);
-        }
+        staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
 
         return StaffCallAcceptResponse.builder()
                 .tableId(sc.getTableId())
@@ -90,14 +86,13 @@ public class StaffCallService {
     }
 
     @Transactional
-    public Map<String, Object> emit(StaffCallEmitRequest req) {
+    public Map<String, Object> emit(Long boothId, StaffCallEmitRequest req) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null || req.getCategory() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type, category는 필수입니다.");
         }
 
-        BoothTable table = boothTableRepository.findById(req.getTableId())
-                .orElseThrow(() -> new IllegalArgumentException("테이블을 찾을 수 없습니다."));
-        Long boothId = table.getBoothId();
+        BoothTable table = boothTableRepository.findByIdAndBoothId(req.getTableId(), boothId)
+                .orElseThrow(() -> new IllegalArgumentException("테이블을 찾을 수 없거나 부스가 일치하지 않습니다."));
 
         if (!"AVAILABLE".equals(table.getStatus()) && !"IN_USE".equals(table.getStatus())) {
             throw new IllegalArgumentException("비활성 테이블에서는 호출할 수 없습니다.");
@@ -130,11 +125,7 @@ public class StaffCallService {
         staffCallRepository.save(sc);
 
         publishRedis(sc, "staff_call_created");
-        try {
-            staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
-        } catch (Exception e) {
-            log.error("[staffcall emit] 스냅샷 조회/WS 푸시 실패 — 호출 저장은 완료됨 boothId={}", boothId, e);
-        }
+        staffCallWebSocketHandler.broadcastSnapshot(boothId, staffCallQueryService.listForBooth(boothId, 50, 0));
 
         Map<String, Object> out = new HashMap<>();
         out.put("message", "직원 호출이 등록되었습니다.");
