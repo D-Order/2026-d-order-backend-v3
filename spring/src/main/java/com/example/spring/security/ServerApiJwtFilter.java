@@ -15,7 +15,9 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * {@code /server/**} 서버(직원) API — access_token 쿠키 필수
+ * {@code /server/**} 서버(직원) API — (기본) access_token 쿠키 필수
+ * <p>
+ * 단, 직원 호출 등록(emit)은 인증을 강제하지 않음
  */
 @Component
 @RequiredArgsConstructor
@@ -35,6 +37,12 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
             return;
         }
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 직원 호출 등록(emit)만 인증을 강제하지 않음
+        if (isStaffCallPublicPath(path)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -59,5 +67,9 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
             return;
         }
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isStaffCallPublicPath(String path) {
+        return "/server/staffcall/request".equals(path);
     }
 }

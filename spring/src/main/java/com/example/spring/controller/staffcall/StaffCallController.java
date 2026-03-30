@@ -8,13 +8,13 @@ import com.example.spring.security.ServerApiJwtFilter;
 import com.example.spring.service.staffcall.StaffCallConflictException;
 import com.example.spring.service.staffcall.StaffCallQueryService;
 import com.example.spring.service.staffcall.StaffCallService;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import jakarta.servlet.http.HttpServletRequest;
 
 @RestController
 @RequestMapping("/server")
@@ -29,11 +29,9 @@ public class StaffCallController {
      */
     @PostMapping("/staffcall/request")
     public ResponseEntity<Map<String, Object>> emit(
-            @RequestBody StaffCallEmitRequest body,
-            HttpServletRequest request) {
-        Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
+            @RequestBody StaffCallEmitRequest body) {
         try {
-            return ResponseEntity.ok(staffCallService.emit(boothId, body));
+            return ResponseEntity.ok(staffCallService.emit(body));
         } catch (StaffCallConflictException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {
@@ -66,9 +64,9 @@ public class StaffCallController {
     public ResponseEntity<Map<String, Object>> accept(
             @RequestBody StaffCallAcceptRequest body,
             HttpServletRequest request) {
-        Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
-        String accessToken = (String) request.getAttribute("ACCESS_TOKEN");
         try {
+            Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
+            String accessToken = (String) request.getAttribute("ACCESS_TOKEN");
             StaffCallAcceptResponse data = staffCallService.accept(boothId, accessToken, body);
             return ResponseEntity.ok(Map.of(
                     "message", "호출을 수락했습니다.",
