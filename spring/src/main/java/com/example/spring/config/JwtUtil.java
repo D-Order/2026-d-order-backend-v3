@@ -120,6 +120,9 @@ public class JwtUtil {
             log.warn("지원하지 않는 JWT 토큰입니다: {}", e.getMessage());
         } catch (MalformedJwtException e) {
             log.warn("잘못된 JWT 토큰입니다: {}", e.getMessage());
+        } catch (io.jsonwebtoken.security.SignatureException e) {
+            // io.jsonwebtoken.security.SignatureException은 SecurityException을 상속하지 않음
+            log.warn("JWT 서명이 유효하지 않습니다: {}", e.getMessage());
         } catch (SecurityException e) {
             log.warn("JWT 서명이 유효하지 않습니다: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
