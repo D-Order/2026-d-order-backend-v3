@@ -48,7 +48,7 @@ public class StaffCallService {
     private StaffCallWebSocketHandler staffCallWebSocketHandler;
 
     @Transactional
-    public StaffCallAcceptResponse accept(Long boothId, String accessToken, StaffCallAcceptRequest req) {
+    public StaffCallAcceptResponse accept(StaffCallAcceptRequest req, String accessToken) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type은 필수입니다.");
         }
@@ -57,15 +57,15 @@ public class StaffCallService {
                 .findByTableCartCallTypeForUpdate(req.getTableId(), req.getCartId(), req.getCallType())
                 .orElseThrow(() -> new IllegalArgumentException("해당 호출을 찾을 수 없습니다."));
 
-        if (!boothId.equals(sc.getBoothId())) {
-            throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
-        }
+        Long boothId = sc.getBoothId();
 
         if (sc.getStatus() != StaffCallStatus.PENDING) {
             throw new StaffCallConflictException("이미 처리된 요청입니다.");
         }
 
-        String acceptedBy = jwtUtil.getUsernameFromToken(accessToken);
+        String acceptedBy = (accessToken != null && jwtUtil.validateToken(accessToken))
+                ? jwtUtil.getUsernameFromToken(accessToken)
+                : null;
         if (acceptedBy == null || acceptedBy.isBlank()) {
             acceptedBy = "unknown";
         }
@@ -86,13 +86,14 @@ public class StaffCallService {
     }
 
     @Transactional
-    public Map<String, Object> emit(Long boothId, StaffCallEmitRequest req) {
+    public Map<String, Object> emit(StaffCallEmitRequest req) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null || req.getCategory() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type, category는 필수입니다.");
         }
 
-        BoothTable table = boothTableRepository.findByIdAndBoothId(req.getTableId(), boothId)
-                .orElseThrow(() -> new IllegalArgumentException("테이블을 찾을 수 없거나 부스가 일치하지 않습니다."));
+        BoothTable table = boothTableRepository.findById(req.getTableId())
+                .orElseThrow(() -> new IllegalArgumentException("테이블을 찾을 수 없습니다."));
+        Long boothId = table.getBoothId();
 
         if (!"AVAILABLE".equals(table.getStatus()) && !"IN_USE".equals(table.getStatus())) {
             throw new IllegalArgumentException("비활성 테이블에서는 호출할 수 없습니다.");

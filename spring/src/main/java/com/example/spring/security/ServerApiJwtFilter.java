@@ -15,7 +15,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * {@code /server/**} 서버(직원) API — access_token 쿠키 필수
+ * {@code /server/**} — Staff Call 목록({@code /staffcall/{boothId}})만 JWT 필수.
+ * 호출 생성({@code /staffcall/request})·수락({@code /accept})은 인증 없이 허용한다.
  */
 @Component
 @RequiredArgsConstructor
@@ -26,6 +27,11 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
     private final CookieUtil cookieUtil;
     private final JwtUtil jwtUtil;
 
+    /** 인증 생략: 호출 등록, 수락 */
+    private static boolean isStaffCallPublicPath(String path) {
+        return "/server/staffcall/request".equals(path) || "/server/accept".equals(path);
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -35,6 +41,11 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
             return;
         }
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        if (isStaffCallPublicPath(path)) {
             filterChain.doFilter(request, response);
             return;
         }
