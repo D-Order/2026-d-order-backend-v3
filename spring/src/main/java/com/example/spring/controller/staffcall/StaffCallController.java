@@ -28,12 +28,9 @@ public class StaffCallController {
      * 직원 호출 발생 — 경로를 {@code /staffcall/{boothId}} 보다 먼저 등록 (request가 boothId로 오인되지 않도록)
      */
     @PostMapping("/staffcall/request")
-    public ResponseEntity<Map<String, Object>> emit(
-            @RequestBody StaffCallEmitRequest body,
-            HttpServletRequest request) {
-        Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
+    public ResponseEntity<Map<String, Object>> emit(@RequestBody StaffCallEmitRequest body) {
         try {
-            return ResponseEntity.ok(staffCallService.emit(boothId, body));
+            return ResponseEntity.ok(staffCallService.emit(body));
         } catch (StaffCallConflictException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {
@@ -66,10 +63,9 @@ public class StaffCallController {
     public ResponseEntity<Map<String, Object>> accept(
             @RequestBody StaffCallAcceptRequest body,
             HttpServletRequest request) {
-        Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
         String accessToken = (String) request.getAttribute("ACCESS_TOKEN");
         try {
-            StaffCallAcceptResponse data = staffCallService.accept(boothId, accessToken, body);
+            StaffCallAcceptResponse data = staffCallService.accept(body, accessToken);
             return ResponseEntity.ok(Map.of(
                     "message", "호출을 수락했습니다.",
                     "data", data
