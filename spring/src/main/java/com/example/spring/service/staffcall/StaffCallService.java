@@ -86,13 +86,14 @@ public class StaffCallService {
     }
 
     @Transactional
-    public Map<String, Object> emit(Long boothId, StaffCallEmitRequest req) {
+    public Map<String, Object> emit(StaffCallEmitRequest req) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null || req.getCategory() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type, category는 필수입니다.");
         }
 
-        BoothTable table = boothTableRepository.findByIdAndBoothId(req.getTableId(), boothId)
-                .orElseThrow(() -> new IllegalArgumentException("테이블을 찾을 수 없거나 부스가 일치하지 않습니다."));
+        BoothTable table = boothTableRepository.findById(req.getTableId())
+                .orElseThrow(() -> new IllegalArgumentException("테이블을 찾을 수 없습니다."));
+        Long boothId = table.getBoothId();
 
         if (!"AVAILABLE".equals(table.getStatus()) && !"IN_USE".equals(table.getStatus())) {
             throw new IllegalArgumentException("비활성 테이블에서는 호출할 수 없습니다.");
