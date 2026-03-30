@@ -8,5 +8,9 @@ import java.util.List;
 
 public interface ServingTaskRepository extends JpaRepository<ServingTask, Long> {
 
-    List<ServingTask> findAllByStatus(ServingStatus status);
+    /**
+     * Django의 orderitem 테이블과 조인하지 않고
+     * serving_task 자체만 조회합니다.
+     */
+    List<ServingTask> findByStatusOrderByRequestedAtAsc(ServingStatus status);
 }

@@ -2,6 +2,7 @@ package com.example.spring.domain.serving;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDateTime;
 
 @Entity
@@ -14,6 +15,11 @@ public class ServingTask {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * Django가 관리하는 orderitem 테이블은
+     * Spring에서 JPA 연관관계로 직접 물지 않고,
+     * FK 값(ID)만 저장합니다.
+     */
     @Column(name = "orderitem", nullable = false)
     private Long orderItemId;
 
@@ -39,7 +45,7 @@ public class ServingTask {
     @Column(name = "catched_by")
     private String catchedBy;
 
-    @Column(name = "key", nullable = false, length = 255) // 소문자 key
+    @Column(name = "key", nullable = false, length = 255)
     private String key;
 
     @Builder
@@ -51,7 +57,6 @@ public class ServingTask {
         this.requestedAt = LocalDateTime.now();
     }
 
-    // 서빙 상태 변경 메서드 (수락)
     public void acceptServing(String catchedBy) {
         this.status = ServingStatus.SERVING;
         this.catchedBy = catchedBy;
@@ -59,14 +64,12 @@ public class ServingTask {
         this.updatedAt = LocalDateTime.now();
     }
 
-    // 서빙 상태 변경 메서드 (완료)
     public void completeServing() {
         this.status = ServingStatus.SERVED;
         this.servedAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
 
-    // 서빙 상태 변경 메서드 (취소)
     public void cancelServing() {
         this.status = ServingStatus.SERVE_REQUESTED;
         this.catchedBy = null;
