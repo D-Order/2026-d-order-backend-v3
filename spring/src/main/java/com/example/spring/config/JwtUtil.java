@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
@@ -22,12 +23,16 @@ public class JwtUtil {
     private final JwtProperties jwtProperties;
 
     /**
-     * SecretKey 생성
-     * Django와 동일한 SECRET_KEY 사용
+     * SecretKey 생성 — Django SimpleJWT / PyJWT와 동일한 바이트열로 HMAC.
+     * jjwt 0.12의 {@link Keys#hmacShaKeyFor}는 256비트 미만 키를 거부하지만,
+     * PyJWT는 짧은 SECRET_KEY로도 서명하므로 그 경우 {@link SecretKeySpec}으로 맞춘다.
      */
     private SecretKey getSigningKey() {
         byte[] keyBytes = jwtProperties.getSecretKey().getBytes(StandardCharsets.UTF_8);
-        return Keys.hmacShaKeyFor(keyBytes);
+        if (keyBytes.length >= 32) {
+            return Keys.hmacShaKeyFor(keyBytes);
+        }
+        return new SecretKeySpec(keyBytes, "HmacSHA256");
     }
 
     /**
