@@ -36,6 +36,14 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             @Param("offset") int offset
     );
 
+    @Query(value = """
+            SELECT COUNT(*)
+            FROM staff_call sc
+            WHERE sc.booth_id = :boothId
+            AND sc.status IN ('PENDING', 'ACCEPTED')
+            """, nativeQuery = true)
+    long countActiveCallsForBooth(@Param("boothId") Long boothId);
+
     long countByTableIdAndCartIdAndCallTypeAndStatus(
             Long tableId,
             Long cartId,

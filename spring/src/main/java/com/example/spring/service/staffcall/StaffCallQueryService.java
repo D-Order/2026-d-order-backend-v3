@@ -23,6 +23,7 @@ public class StaffCallQueryService {
         int safeLimit = Math.min(Math.max(limit, 1), 200);
         int safeOffset = Math.max(offset, 0);
 
+        long total = staffCallRepository.countActiveCallsForBooth(boothId);
         List<StaffCall> page = staffCallRepository.findActiveCallsForBooth(boothId, safeLimit + 1, safeOffset);
         boolean hasMore = page.size() > safeLimit;
         List<StaffCall> slice = hasMore ? page.subList(0, safeLimit) : page;
@@ -35,6 +36,7 @@ public class StaffCallQueryService {
         body.put("message", "ok");
         body.put("data", items);
         body.put("has_more", hasMore);
+        body.put("total", total);
         return body;
     }
 }

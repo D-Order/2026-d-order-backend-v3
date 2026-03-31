@@ -80,6 +80,7 @@ public class StaffCallWebSocketHandler extends TextWebSocketHandler {
         out.put("message", snapshot.get("message"));
         out.put("data", snapshot.get("data"));
         out.put("has_more", snapshot.get("has_more"));
+        out.put("total", snapshot.get("total"));
 
         session.sendMessage(new TextMessage(objectMapper.writeValueAsString(out)));
     }
@@ -95,6 +96,7 @@ public class StaffCallWebSocketHandler extends TextWebSocketHandler {
             out.put("message", snapshot.get("message"));
             out.put("data", snapshot.get("data"));
             out.put("has_more", snapshot.get("has_more"));
+            out.put("total", snapshot.get("total"));
             String json = objectMapper.writeValueAsString(out);
             TextMessage tm = new TextMessage(json);
             for (WebSocketSession s : sessions) {

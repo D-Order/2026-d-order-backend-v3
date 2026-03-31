@@ -74,4 +74,11 @@ public class StaffCall {
         this.acceptedBy = acceptedBy;
         this.updatedAt = this.acceptedAt;
     }
+
+    public void unaccept() {
+        this.status = StaffCallStatus.PENDING;
+        this.acceptedAt = null;
+        this.acceptedBy = null;
+        this.updatedAt = LocalDateTime.now();
+    }
 }
