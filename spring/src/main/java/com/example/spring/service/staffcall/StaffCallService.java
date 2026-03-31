@@ -16,6 +16,7 @@ import com.example.spring.repository.cart.CartEntityRepository;
 import com.example.spring.repository.staffcall.StaffCallRepository;
 import com.example.spring.repository.table.BoothTableRepository;
 import com.example.spring.repository.table.TableUsageEntityRepository;
+import com.example.spring.websocket.CustomerStaffCallWebSocketHandler;
 import com.example.spring.websocket.StaffCallWebSocketHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +48,10 @@ public class StaffCallService {
     @Lazy
     @Autowired
     private StaffCallWebSocketHandler staffCallWebSocketHandler;
+
+    @Lazy
+    @Autowired
+    private CustomerStaffCallWebSocketHandler customerStaffCallWebSocketHandler;
 
     @Transactional
     public StaffCallAcceptResponse accept(Long boothId, String accessToken, StaffCallAcceptRequest req) {
@@ -80,6 +85,7 @@ public class StaffCallService {
         try {
             staffCallWebSocketHandler.broadcastSnapshot(boothId,
                     staffCallQueryService.listForBooth(boothId, 50, 0));
+            customerStaffCallWebSocketHandler.broadcastStatus(sc);
         } catch (Exception e) {
             log.error("[staffcall accept] 스냅샷 조회/WS 푸시 실패 — 수락은 반영됨 boothId={}", boothId, e);
         }
@@ -123,6 +129,7 @@ public class StaffCallService {
         try {
             staffCallWebSocketHandler.broadcastSnapshot(boothId,
                     staffCallQueryService.listForBooth(boothId, 50, 0));
+            customerStaffCallWebSocketHandler.broadcastStatus(sc);
         } catch (Exception e) {
             log.error("[staffcall cancelAccept] 스냅샷 조회/WS 푸시 실패 — 취소는 반영됨 boothId={}", boothId, e);
         }
@@ -176,10 +183,13 @@ public class StaffCallService {
 
         staffCallRepository.save(sc);
 
+        String subscribeToken = customerStaffCallWebSocketHandler.issueSubscribeToken(sc.getId());
+
         publishRedis(sc, "staff_call_created");
         try {
             staffCallWebSocketHandler.broadcastSnapshot(boothId,
                     staffCallQueryService.listForBooth(boothId, 50, 0));
+            customerStaffCallWebSocketHandler.broadcastStatus(sc);
         } catch (Exception e) {
             // 호출 생성/수락은 저장 트랜잭션에 포함된 비즈니스 결과이므로
             // WS 스냅샷 실패가 전체 요청을 500으로 만들지 않도록 예외를 삼킨다.
@@ -189,6 +199,7 @@ public class StaffCallService {
         Map<String, Object> out = new HashMap<>();
         out.put("message", "직원 호출이 등록되었습니다.");
         out.put("data", StaffCallItemResponse.from(sc));
+        out.put("subscribe_token", subscribeToken);
         return out;
     }
 
