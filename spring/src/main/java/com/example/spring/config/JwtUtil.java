@@ -2,12 +2,14 @@ package com.example.spring.config;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.MacAlgorithm;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
@@ -20,16 +22,59 @@ import java.util.Date;
 @Slf4j
 public class JwtUtil {
 
+    private static final int STRONG_SECRET_MIN_BYTES = 32;
+
+    /**
+     * jjwt 기본 HS256은 키를 256비트 이상만 허용한다. Django/PyJWT는 더 짧은 SECRET_KEY도 허용하므로,
+     * 동일 alg id(HS256)로 최소 길이만 낮춘 MacAlgorithm을 jjwt-impl에서 리플렉션으로 만든다.
+     */
+    private static final String DEFAULT_MAC_ALGORITHM_CLASS = "io.jsonwebtoken.impl.security.DefaultMacAlgorithm";
+
     private final JwtProperties jwtProperties;
+
+    private volatile MacAlgorithm relaxedHs256;
+
+    private byte[] secretKeyUtf8Bytes() {
+        return jwtProperties.getSecretKey().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private boolean usesShortSecret() {
+        return secretKeyUtf8Bytes().length < STRONG_SECRET_MIN_BYTES;
+    }
+
+    private MacAlgorithm hs256Algorithm() {
+        if (!usesShortSecret()) {
+            return Jwts.SIG.HS256;
+        }
+        if (relaxedHs256 == null) {
+            synchronized (this) {
+                if (relaxedHs256 == null) {
+                    relaxedHs256 = createRelaxedHs256MacAlgorithm();
+                }
+            }
+        }
+        return relaxedHs256;
+    }
+
+    private static MacAlgorithm createRelaxedHs256MacAlgorithm() {
+        try {
+            Class<?> clazz = Class.forName(DEFAULT_MAC_ALGORITHM_CLASS);
+            Constructor<?> ctor = clazz.getDeclaredConstructor(String.class, String.class, int.class);
+            ctor.setAccessible(true);
+            return (MacAlgorithm) ctor.newInstance("HS256", "HmacSHA256", 8);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                    "짧은 SECRET_KEY용 HS256 MacAlgorithm을 만들 수 없습니다. jjwt-impl 버전을 확인하세요.", e);
+        }
+    }
 
     /**
      * SecretKey 생성 — Django SimpleJWT / PyJWT와 동일한 바이트열로 HMAC.
-     * jjwt 0.12의 {@link Keys#hmacShaKeyFor}는 256비트 미만 키를 거부하지만,
-     * PyJWT는 짧은 SECRET_KEY로도 서명하므로 그 경우 {@link SecretKeySpec}으로 맞춘다.
+     * jjwt 0.12의 {@link Keys#hmacShaKeyFor}는 256비트 미만 키를 거부하므로, 짧을 때는 {@link SecretKeySpec}을 쓴다.
      */
     private SecretKey getSigningKey() {
-        byte[] keyBytes = jwtProperties.getSecretKey().getBytes(StandardCharsets.UTF_8);
-        if (keyBytes.length >= 32) {
+        byte[] keyBytes = secretKeyUtf8Bytes();
+        if (keyBytes.length >= STRONG_SECRET_MIN_BYTES) {
             return Keys.hmacShaKeyFor(keyBytes);
         }
         return new SecretKeySpec(keyBytes, "HmacSHA256");
@@ -49,7 +94,7 @@ public class JwtUtil {
                 .claim("token_type", "access")
                 .issuedAt(now)
                 .expiration(expiry)
-                .signWith(getSigningKey())
+                .signWith(getSigningKey(), hs256Algorithm())
                 .compact();
     }
 
@@ -67,7 +112,7 @@ public class JwtUtil {
                 .claim("token_type", "refresh")
                 .issuedAt(now)
                 .expiration(expiry)
-                .signWith(getSigningKey())
+                .signWith(getSigningKey(), hs256Algorithm())
                 .compact();
     }
 
@@ -75,9 +120,11 @@ public class JwtUtil {
      * 토큰에서 Claims 추출
      */
     public Claims parseClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(getSigningKey())
-                .build()
+        JwtParserBuilder builder = Jwts.parser().verifyWith(getSigningKey());
+        if (usesShortSecret()) {
+            builder = builder.sig().remove(Jwts.SIG.HS256).add(hs256Algorithm()).and();
+        }
+        return builder.build()
                 .parseSignedClaims(token)
                 .getPayload();
     }
@@ -110,8 +157,6 @@ public class JwtUtil {
         return username != null ? username.toString() : null;
     }
 
-    
-
     /**
      * 토큰 유효성 검증
      */
@@ -126,12 +171,13 @@ public class JwtUtil {
         } catch (MalformedJwtException e) {
             log.warn("잘못된 JWT 토큰입니다: {}", e.getMessage());
         } catch (io.jsonwebtoken.security.SignatureException e) {
-            // io.jsonwebtoken.security.SignatureException은 SecurityException을 상속하지 않음
             log.warn("JWT 서명이 유효하지 않습니다: {}", e.getMessage());
         } catch (SecurityException e) {
             log.warn("JWT 서명이 유효하지 않습니다: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
             log.warn("JWT 토큰이 비어있습니다: {}", e.getMessage());
+        } catch (io.jsonwebtoken.security.WeakKeyException e) {
+            log.warn("JWT 키 길이 검증 실패: {}", e.getMessage());
         }
         return false;
     }
