@@ -8,6 +8,7 @@ import com.example.spring.domain.table.BoothTable;
 import com.example.spring.domain.table.TableUsageEntity;
 import com.example.spring.dto.redis.StaffCallRedisMessageDto;
 import com.example.spring.dto.staffcall.request.StaffCallAcceptRequest;
+import com.example.spring.dto.staffcall.request.StaffCallCancelRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
 import com.example.spring.dto.staffcall.response.StaffCallItemResponse;
@@ -62,6 +63,9 @@ public class StaffCallService {
         }
 
         if (sc.getStatus() != StaffCallStatus.PENDING) {
+            if (sc.getStatus() == StaffCallStatus.ACCEPTED) {
+                throw new StaffCallConflictException("이미 수락된 요청입니다.");
+            }
             throw new StaffCallConflictException("이미 처리된 요청입니다.");
         }
 
@@ -88,6 +92,45 @@ public class StaffCallService {
                 .acceptedAt(sc.getAcceptedAt())
                 .acceptedBy(sc.getAcceptedBy())
                 .build();
+    }
+
+    @Transactional
+    public Map<String, Object> cancelAccept(Long boothId, String accessToken, StaffCallCancelRequest req) {
+        if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null) {
+            throw new IllegalArgumentException("table_id, cart_id, call_type은 필수입니다.");
+        }
+
+        StaffCall sc = staffCallRepository
+                .findByTableCartCallTypeForUpdate(req.getTableId(), req.getCartId(), req.getCallType())
+                .orElseThrow(() -> new IllegalArgumentException("해당 호출을 찾을 수 없습니다."));
+
+        if (!boothId.equals(sc.getBoothId())) {
+            throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
+        }
+
+        if (sc.getStatus() != StaffCallStatus.ACCEPTED) {
+            throw new StaffCallConflictException("수락된 호출만 취소할 수 있습니다.");
+        }
+
+        String actor = jwtUtil.getUsernameFromToken(accessToken);
+        if (actor != null && !actor.isBlank() && sc.getAcceptedBy() != null && !sc.getAcceptedBy().equals(actor)) {
+            throw new StaffCallConflictException("다른 사용자가 수락한 호출은 취소할 수 없습니다.");
+        }
+
+        sc.unaccept();
+
+        publishRedis(sc, "staff_call_unaccepted");
+        try {
+            staffCallWebSocketHandler.broadcastSnapshot(boothId,
+                    staffCallQueryService.listForBooth(boothId, 50, 0));
+        } catch (Exception e) {
+            log.error("[staffcall cancelAccept] 스냅샷 조회/WS 푸시 실패 — 취소는 반영됨 boothId={}", boothId, e);
+        }
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("message", "호출 수락을 취소했습니다.");
+        out.put("data", StaffCallItemResponse.from(sc));
+        return out;
     }
 
     @Transactional
