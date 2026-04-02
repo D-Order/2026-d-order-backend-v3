@@ -93,7 +93,7 @@ def update_item_quantity(*, table_usage_id: int, cart_item_id: int, quantity: in
         )
 
     item = get_object_or_404(
-        CartItem.objects.select_for_update().select_related("menu", "setmenu"),
+        CartItem.objects.select_for_update(),
         id=cart_item_id,
         cart=cart,
     )

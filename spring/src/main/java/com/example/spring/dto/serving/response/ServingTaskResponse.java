@@ -16,12 +16,10 @@ public class ServingTaskResponse {
     private String catchedBy;
     private LocalDateTime requestedAt;
 
-    // 서빙 테스크 Entity를 받아서 DTO로 변환
     public static ServingTaskResponse from(ServingTask task) {
         return ServingTaskResponse.builder()
                 .taskId(task.getId())
-                // 만약 연관관계 매핑 에러로 orderItem이 null이면 여기서 터질 수 있습니다.
-                .orderItemId(task.getOrderItem() != null ? task.getOrderItem().getId() : null)
+                .orderItemId(task.getOrderItemId())
                 .status(task.getStatus() != null ? task.getStatus().name() : null)
                 .catchedBy(task.getCatchedBy())
                 .requestedAt(task.getRequestedAt())

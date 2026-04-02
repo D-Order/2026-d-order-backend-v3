@@ -151,6 +151,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       SPRING_DB_USER: ${SPRING_DB_USER}
       SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
+      # JWT 시크릿 키 (Django와 동일한 키 사용)
+      SECRET_KEY: ${SECRET_KEY}
       # Django API URL Django API 설정 (BFF 패턴)
       DJANGO_API_URL: ${DJANGO_API_URL}
       # Redis 설정 - Django와 공유

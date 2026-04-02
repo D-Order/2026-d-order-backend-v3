@@ -27,5 +27,6 @@ public class JwtProperties {
         private boolean httpOnly = true;
         private String sameSite = "Lax";
         private boolean secure = false;
+        private String domain = ""; // 로컬: 빈 문자열 = Domain 속성 생략, prod: .dorder-api.shop
     }
 }

@@ -24,18 +24,15 @@ def error_response(e: CouponError):
 
 
 def get_admin_booth(request) -> Booth:
-    if not request.user.is_staff:
-        raise CouponError("권한이 없습니다.", error_code="FORBIDDEN", detail="admin only", status_code=403)
-
-    try:
-        return request.user.booth
-    except Booth.DoesNotExist:
+    booth = getattr(request.user, "booth", None)
+    if not booth:
         raise CouponError(
             "운영자 부스 정보를 찾을 수 없습니다.",
             error_code="BOOTH_NOT_FOUND",
             detail="user has no booth mapped",
             status_code=404,
         )
+    return booth
 
 
 # 운영자용: 쿠폰 목록/등록
@@ -205,3 +202,26 @@ class CouponApplyAPIView(APIView):
         )
         
         return Response({"message": "쿠폰 적용이 취소되었습니다", "data": result}, status=200)
+    
+class CouponDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, coupon_id: int):
+        try:
+            booth = get_admin_booth(request)
+            status = request.query_params.get("status", "ALL")
+            result = get_coupon_detail_with_codes(
+                booth=booth,
+                coupon_id=coupon_id,
+                status=status,
+            )
+        except CouponError as e:
+            return error_response(e)
+
+        return Response(
+            {
+                "message": "쿠폰 상세 조회에 성공했습니다.",
+                "data": result,
+            },
+            status=200,
+        )

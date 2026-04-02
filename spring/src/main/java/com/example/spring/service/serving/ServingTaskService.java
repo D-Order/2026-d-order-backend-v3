@@ -1,8 +1,10 @@
 package com.example.spring.service.serving;
 
+import com.example.spring.websocket.ServingWebSocketHandler;
 import com.example.spring.domain.serving.ServingStatus;
 import com.example.spring.domain.serving.ServingTask;
 import com.example.spring.dto.redis.ServingStatusMessageDto;
+import com.example.spring.dto.serving.response.ServingTaskResponse; // 🌟 이 부분이 추가되었습니다!
 import com.example.spring.repository.serving.ServingTaskRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -20,48 +23,85 @@ import java.util.List;
 public class ServingTaskService {
 
     private final ServingTaskRepository servingTaskRepository;
-    private final StringRedisTemplate redisTemplate; // Redis 발행을 위한 내장 템플릿
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final ServingWebSocketHandler webSocketHandler;
 
-    // 1. 부스별 서빙 요청 리스트 조회
     @Transactional(readOnly = true)
     public List<ServingTask> getPendingServingCalls(Long boothId) {
-        // 🌟 새로 만든 fetch join 메서드 호출
-        return servingTaskRepository.findAllByStatusWithOrderItem(ServingStatus.SERVE_REQUESTED);
+        return servingTaskRepository.findByStatusOrderByRequestedAtAsc(ServingStatus.SERVE_REQUESTED);
     }
 
-    // 2. 서빙 수락 (Catch)
+    // 🌟 수정됨: 서빙 수락 (Redis 선착순 락 적용)
     @Transactional
     public void catchCall(Long taskId, Long boothId, String catchedBy) {
-        ServingTask task = servingTaskRepository.findById(taskId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 서빙 요청입니다."));
+        String lockKey = "lock:serving_task:" + taskId;
+        Boolean isAcquired = redisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "locked", 5, TimeUnit.SECONDS);
 
-        task.acceptServing(catchedBy); // 상태 변경 (SERVING)
+        if (Boolean.FALSE.equals(isAcquired)) {
+            throw new IllegalStateException("이미 다른 직원이 수락한 요청입니다.");
+        }
 
-        // 장고로 상태 변경 메시지 발행
-        publishToDjango(boothId, "serving", task.getOrderItem().getId(), catchedBy);
+        try {
+            ServingTask task = servingTaskRepository.findById(taskId)
+                    .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 서빙 요청입니다. taskId=" + taskId));
+
+            if (task.getStatus() != ServingStatus.SERVE_REQUESTED) {
+                throw new IllegalStateException("이미 처리된 요청입니다.");
+            }
+
+            String actor = (catchedBy != null && !catchedBy.isEmpty()) ? catchedBy : "STAFF";
+            task.acceptServing(actor);
+
+            // 1. 장고 측으로 Redis 메시지 발행
+            publishToDjango(boothId, "serving", task.getOrderItemId(), actor);
+
+            // 2. 🌟 프론트엔드로 웹소켓 브로드캐스트 (CATCH_CALL 이벤트)
+            webSocketHandler.broadcastEvent("CATCH_CALL", ServingTaskResponse.from(task));
+
+        } finally {
+            redisTemplate.delete(lockKey);
+        }
     }
 
-    // 3. 서빙 완료
     @Transactional
     public void completeCall(Long taskId, Long boothId) {
         ServingTask task = servingTaskRepository.findById(taskId).orElseThrow();
-        task.completeServing(); // 상태 변경 (SERVED)
+        task.completeServing();
 
-        publishToDjango(boothId, "served", task.getOrderItem().getId(), null);
+        publishToDjango(boothId, "served", task.getOrderItemId(), null);
+
+        // 🌟 프론트엔드로 웹소켓 브로드캐스트 (COMPLETE_CALL 이벤트)
+        webSocketHandler.broadcastEvent("COMPLETE_CALL", ServingTaskResponse.from(task));
     }
 
-    // 4. 서빙 수락 취소
     @Transactional
     public void cancelCall(Long taskId, Long boothId) {
         ServingTask task = servingTaskRepository.findById(taskId).orElseThrow();
-        task.cancelServing(); // 상태 변경 (SERVE_REQUESTED 롤백)
+        task.cancelServing();
 
-        // 장고 측 OrderItem 상태도 다시 cooked로 롤백
-        publishToDjango(boothId, "cooked", task.getOrderItem().getId(), null);
+        publishToDjango(boothId, "cooked", task.getOrderItemId(), null);
+
+        // 🌟 프론트엔드로 웹소켓 브로드캐스트 (CANCEL_CALL 이벤트)
+        webSocketHandler.broadcastEvent("CANCEL_CALL", ServingTaskResponse.from(task));
     }
 
-    // 장고가 구독 중인 채널로 Redis 메시지 발행
+    // 장고(Django) -> 스프링(Spring) : 새 조리 완료 알림이 왔을 때 호출될 메서드
+    @Transactional
+    public void createNewServingTask(Long orderItemId, String key) {
+        // 1. 새 태스크 생성 및 저장
+        ServingTask newTask = ServingTask.builder()
+                .orderItemId(orderItemId)
+                .key(key)
+                .build();
+        servingTaskRepository.save(newTask);
+
+        // 2. 🌟 프론트엔드로 웹소켓 브로드캐스트 (NEW_CALL 이벤트)
+        webSocketHandler.broadcastEvent("NEW_CALL", ServingTaskResponse.from(newTask));
+        log.info("[새 서빙 요청 생성 및 브로드캐스트] orderItemId: {}", orderItemId);
+    }
+
     private void publishToDjango(Long boothId, String status, Long orderItemId, String catchedBy) {
         try {
             ServingStatusMessageDto messageDto = ServingStatusMessageDto.builder()
@@ -71,17 +111,14 @@ public class ServingTaskService {
                     .pushedAt(LocalDateTime.now())
                     .build();
 
-            // 객체를 JSON 문자열로 변환
             String jsonMessage = objectMapper.writeValueAsString(messageDto);
-
-            // 이해는 못했으나.. 발행용 채널명 (spring: 접두사는 Nginx나 Redis 설정에서 안 붙는다면 여기서 직접 붙여야 할 수 있으나 명세서대로 "spring:" 포함)
             String channel = "spring:booth:" + boothId + ":order:" + status;
 
             redisTemplate.convertAndSend(channel, jsonMessage);
             log.info("[Redis 발행 완료] 채널: {}, 데이터: {}", channel, jsonMessage);
 
         } catch (Exception e) {
-            log.error("[Redis 발행 실패]", e);
+            log.error("[Redis 발행 실패] boothId={}, status={}, orderItemId={}", boothId, status, orderItemId, e);
         }
     }
 }

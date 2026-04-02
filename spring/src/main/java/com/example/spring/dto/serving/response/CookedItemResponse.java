@@ -23,7 +23,7 @@ public class CookedItemResponse {
     public static CookedItemResponse from(ServingTask task) {
         return CookedItemResponse.builder()
                 .taskId(task.getId())
-                .orderItemId(task.getOrderItem().getId())
+                .orderItemId(task.getOrderItemId())
                 .status(task.getStatus().name())
                 .requestedAt(task.getRequestedAt())
                 .build();

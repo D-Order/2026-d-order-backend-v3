@@ -138,6 +138,12 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
+jwt:
+  cookie:
+    secure: true
+    same-site: "None"    # Django와 동일 (Safari/iOS WebSocket 쿠키 누락 방지) - 따옴표 필수 (YAML에서 None은 null로 파싱됨)
+    domain: .dorder-api.shop  # 모든 서브도메인 쿠키 공유
+
 # 서버 설정
 server:
   port: 8080
