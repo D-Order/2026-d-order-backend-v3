@@ -7,4 +7,5 @@ urlpatterns = [
     path("menu/", CartUpdateQuantityAPIView.as_view(), name="cart-update-quantity"),
     path("menu/delete/", CartDeleteItemAPIView.as_view(), name="cart-delete-item"),
     path("payment-info/", CartPaymentInfoAPIView.as_view(), name="cart-payment-info"),
+    path("payment-cancel/", CartPaymentCancelAPIView.as_view(), name="cart-payment-cancel"),
 ]

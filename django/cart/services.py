@@ -89,11 +89,14 @@ def _ensure_table_usage_alive(table_usage: TableUsage):
         raise CartError("이미 종료된 세션입니다.", "TABLE_USAGE_ENDED", status_code=410)
 
 
-def _restore_if_pending_expired(cart: Cart):
-    if cart.is_pending_expired():
-        cart.status = Cart.Status.ACTIVE
-        cart.pending_expires_at = None
-        cart.save(update_fields=["status", "pending_expires_at"])
+def _restore_if_pending_expired(cart: Cart) -> bool:
+    if not cart.is_pending_expired():
+        return False
+
+    cart.status = Cart.Status.ACTIVE
+    cart.pending_expires_at = None
+    cart.save(update_fields=["status", "pending_expires_at"])
+    return True
 
 
 def _sync_item_prices_to_latest(cart: Cart) -> None:
@@ -242,7 +245,22 @@ def get_or_create_cart_by_table_usage(table_usage_id: int) -> Cart:
     _ensure_table_usage_alive(table_usage)
 
     cart, _ = Cart.objects.select_for_update().get_or_create(table_usage=table_usage)
-    _restore_if_pending_expired(cart)
+
+    restored = _restore_if_pending_expired(cart)
+
+    if restored:
+        final_table_usage_id = cart.table_usage_id
+
+        from .services_ws import broadcast_cart_event
+
+        transaction.on_commit(
+            lambda: broadcast_cart_event(
+                table_usage_id=final_table_usage_id,
+                event_type="CART_PENDING_EXPIRED",
+                message="결제 대기 시간이 만료되어 장바구니가 다시 활성화되었습니다.",
+            )
+        )
+
     return cart
 
 @transaction.atomic
@@ -512,6 +530,35 @@ def enter_payment_info(*, table_usage_id: int):
     }
 
     return cart, payment
+
+@transaction.atomic
+def cancel_payment_and_restore_cart(*, table_usage_id: int) -> Cart:
+    cart = get_or_create_cart_by_table_usage(table_usage_id)
+
+    if cart.status != Cart.Status.PENDING:
+        raise CartError(
+            "현재 결제 취소가 가능한 상태가 아닙니다.",
+            "CART_NOT_PENDING",
+            status_code=409,
+        )
+
+    cart.status = Cart.Status.ACTIVE
+    cart.pending_expires_at = None
+    cart.save(update_fields=["status", "pending_expires_at"])
+
+    final_table_usage_id = cart.table_usage_id
+
+    from .services_ws import broadcast_cart_event
+
+    transaction.on_commit(
+        lambda: broadcast_cart_event(
+            table_usage_id=final_table_usage_id,
+            event_type="CART_PAYMENT_CANCELLED",
+            message="결제가 취소되어 장바구니가 다시 활성화되었습니다.",
+        )
+    )
+
+    return cart
 
 def _calc_discount(subtotal: int, discount_type: str, discount_value) -> int:
     # 결제 확정 시점(Order 생성)에 '할인액/결제액'을 확정해야 해서 계산 필요
