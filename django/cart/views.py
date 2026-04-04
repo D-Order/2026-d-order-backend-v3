@@ -160,6 +160,13 @@ class CartDetailAPIView(APIView):
                         "round": cart.round,
                         "created_at": cart.created_at,
                     },
+                    "fee_policy": {
+                        "seat_type": table_usage.table.booth.seat_type,
+                        "is_first_round": cart.round == 0,
+                        "has_fee_item": cart.items.filter(menu__category="FEE").exists(),
+                        "fee_required": _is_fee_booth(table_usage.table.booth) and cart.round == 0,
+                        "fee_addable": _can_add_fee_in_this_round(cart),
+                    },
                     "items": items,
                     "coupon": coupon,
                     "summary": {

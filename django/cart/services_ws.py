@@ -4,7 +4,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from table.models import TableUsage
-from .services import get_or_create_cart_by_table_usage, recalc_cart_price, _calc_discount
+from cart.services import *
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,13 @@ def build_cart_snapshot_data(table_usage_id: int):
             ),
             "round": cart.round,
             "created_at": cart.created_at.isoformat() if cart.created_at else None,
+        },
+        "fee_policy": {
+            "seat_type": table_usage.table.booth.seat_type,
+            "is_first_round": cart.round == 0,
+            "has_fee_item": cart.items.filter(menu__category="FEE").exists(),
+            "fee_required": _is_fee_booth(table_usage.table.booth) and cart.round == 0,
+            "fee_addable": _can_add_fee_in_this_round(cart),
         },
         "items": items,
         "coupon": coupon,
