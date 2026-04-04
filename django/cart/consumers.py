@@ -5,7 +5,8 @@ from django.utils import timezone
 from core.mixins import KoreanAsyncJsonMixin
 from table.models import TableUsage
 from .models import Cart, CartItem
-from .services import get_or_create_cart_by_table_usage, recalc_cart_price
+from .services import *
+from .services_ws import *
 
 
 class CustomerCartConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
@@ -15,15 +16,15 @@ class CustomerCartConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
     그룹: table_usage_{table_usage_id}.cart
 
     이벤트 타입:
-      ① CART_SNAPSHOT
-      ② CART_UPDATED
-      ③ CART_ITEM_ADDED
-      ④ CART_ITEM_UPDATED
-      ⑤ CART_ITEM_DELETED
-      ⑥ CART_COUPON_APPLIED
-      ⑦ CART_COUPON_CANCELLED
-      ⑧ CART_PAYMENT_PENDING
-      ⑨ CART_RESET
+    ① CART_SNAPSHOT
+    ② CART_UPDATED
+    ③ CART_ITEM_ADDED
+    ④ CART_ITEM_UPDATED
+    ⑤ CART_ITEM_DELETED
+    ⑥ CART_COUPON_APPLIED
+    ⑦ CART_COUPON_CANCELLED
+    ⑧ CART_PAYMENT_PENDING
+    ⑨ CART_RESET
     """
 
     async def connect(self):
@@ -81,77 +82,4 @@ class CustomerCartConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
         })
 
     async def _build_cart_payload(self):
-        def _query():
-            table_usage = TableUsage.objects.select_related("table", "table__booth").get(
-                id=self.table_usage_id
-            )
-            cart = get_or_create_cart_by_table_usage(table_usage.id)
-            recalc_cart_price(cart)
-
-            items = []
-            for it in cart.items.select_related("menu", "setmenu"):
-                if it.menu_id:
-                    name = it.menu.name
-                    unit_price = int(it.menu.price)
-                    is_sold_out = it.menu.stock <= 0
-                else:
-                    name = it.setmenu.name
-                    unit_price = int(it.setmenu.price)
-                    is_sold_out = False
-
-                items.append({
-                    "id": it.id,
-                    "type": it.type,
-                    "menu_id": it.menu_id,
-                    "set_menu_id": it.setmenu_id,
-                    "name": name,
-                    "unit_price": unit_price,
-                    "quantity": it.quantity,
-                    "line_price": it.line_price,
-                    "is_sold_out": is_sold_out,
-                })
-
-            coupon = {
-                "applied": False,
-                "coupon_id": None,
-                "coupon_code": None,
-                "discount_type": None,
-                "discount_value": None,
-                "discount_amount": None,
-            }
-
-            subtotal = cart.cart_price
-            discount_total = 0
-            total = subtotal - discount_total
-
-            return {
-                "table_usage": {
-                    "id": table_usage.id,
-                    "table_id": table_usage.table_id,
-                    "table_num": table_usage.table.table_num,
-                    "booth_id": table_usage.table.booth_id,
-                    "group_id": table_usage.table.group_id,
-                    "started_at": table_usage.started_at.isoformat() if table_usage.started_at else None,
-                    "ended_at": table_usage.ended_at.isoformat() if table_usage.ended_at else None,
-                },
-                "cart": {
-                    "id": cart.id,
-                    "table_usage_id": cart.table_usage_id,
-                    "status": cart.status,
-                    "cart_price": cart.cart_price,
-                    "pending_expires_at": (
-                        cart.pending_expires_at.isoformat() if cart.pending_expires_at else None
-                    ),
-                    "round": cart.round,
-                    "created_at": cart.created_at.isoformat() if cart.created_at else None,
-                },
-                "items": items,
-                "coupon": coupon,
-                "summary": {
-                    "subtotal": subtotal,
-                    "discount_total": discount_total,
-                    "total": total,
-                },
-            }
-
-        return await sync_to_async(_query)()
+        return await sync_to_async(build_cart_snapshot_data)(self.table_usage_id)
