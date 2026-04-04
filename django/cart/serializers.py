@@ -51,3 +51,7 @@ class DeleteItemSerializer(serializers.Serializer):
 
 class PaymentInfoSerializer(serializers.Serializer):
     table_usage_id = serializers.IntegerField()
+    
+
+class PaymentCancelSerializer(serializers.Serializer):
+    table_usage_id = serializers.IntegerField()

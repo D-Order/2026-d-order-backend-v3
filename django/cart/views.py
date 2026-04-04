@@ -279,3 +279,35 @@ class CartPaymentInfoAPIView(APIView):
             },
             status=200,
         )
+        
+class CartPaymentCancelAPIView(APIView):
+    """
+    POST /api/v3/django/cart/payment-cancel/
+    """
+
+    def post(self, request):
+        serializer = PaymentCancelSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            cart = cancel_payment_and_restore_cart(
+                table_usage_id=serializer.validated_data["table_usage_id"]
+            )
+        except CartError as e:
+            return error_response(e)
+
+        return Response(
+            {
+                "message": "결제가 취소되어 장바구니가 다시 활성화되었습니다.",
+                "data": {
+                    "cart": {
+                        "id": cart.id,
+                        "table_usage_id": cart.table_usage_id,
+                        "status": cart.status,
+                        "pending_expires_at": cart.pending_expires_at,
+                        "round": cart.round,
+                    }
+                },
+            },
+            status=200,
+        )
