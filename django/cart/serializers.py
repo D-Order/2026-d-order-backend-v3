@@ -55,3 +55,10 @@ class PaymentInfoSerializer(serializers.Serializer):
 
 class PaymentCancelSerializer(serializers.Serializer):
     table_usage_id = serializers.IntegerField()
+    
+class PaymentConfirmSerializer(serializers.Serializer):
+    table_usage_id = serializers.IntegerField()
+
+
+class CartResetSerializer(serializers.Serializer):
+    table_usage_id = serializers.IntegerField()
