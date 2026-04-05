@@ -311,3 +311,70 @@ class CartPaymentCancelAPIView(APIView):
             },
             status=200,
         )
+        
+class CartPaymentConfirmAPIView(APIView):
+    """
+    POST /api/v3/django/cart/payment-confirm/
+    운영진이 결제 확인 슬라이드 완료 시 호출
+    """
+
+    def post(self, request):
+        serializer = PaymentConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            cart = confirm_payment_and_mark_ordered(
+                table_usage_id=serializer.validated_data["table_usage_id"]
+            )
+        except CartError as e:
+            return error_response(e)
+
+        return Response(
+            {
+                "message": "결제가 확인되어 주문이 완료되었습니다.",
+                "data": {
+                    "cart": {
+                        "id": cart.id,
+                        "table_usage_id": cart.table_usage_id,
+                        "status": cart.status,
+                        "pending_expires_at": cart.pending_expires_at,
+                        "round": cart.round,
+                    }
+                },
+            },
+            status=200,
+        )
+
+
+class CartResetAPIView(APIView):
+    """
+    POST /api/v3/django/cart/reset/
+    주문 완료 화면 처리 후 cart를 새 round로 초기화
+    """
+
+    def post(self, request):
+        serializer = CartResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            cart = reset_ordered_cart(
+                table_usage_id=serializer.validated_data["table_usage_id"]
+            )
+        except CartError as e:
+            return error_response(e)
+
+        return Response(
+            {
+                "message": "장바구니가 초기화되었습니다.",
+                "data": {
+                    "cart": {
+                        "id": cart.id,
+                        "table_usage_id": cart.table_usage_id,
+                        "status": cart.status,
+                        "pending_expires_at": cart.pending_expires_at,
+                        "round": cart.round,
+                    }
+                },
+            },
+            status=200,
+        )

@@ -8,4 +8,6 @@ urlpatterns = [
     path("menu/delete/", CartDeleteItemAPIView.as_view(), name="cart-delete-item"),
     path("payment-info/", CartPaymentInfoAPIView.as_view(), name="cart-payment-info"),
     path("payment-cancel/", CartPaymentCancelAPIView.as_view(), name="cart-payment-cancel"),
+    path("payment-confirm/", CartPaymentConfirmAPIView.as_view()),
+    path("reset/", CartResetAPIView.as_view()),
 ]

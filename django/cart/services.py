@@ -573,28 +573,9 @@ def _calc_discount(subtotal: int, discount_type: str, discount_value) -> int:
     return max(0, min(subtotal, amt))
 
 
-@transaction.atomic
-def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
-
-    # 운영자 입금 확인(결제 확정) 시점에 호출되는 '최종 확정 처리' 훅
-    # 여기서 주문 생성/재고 차감/매출 반영/쿠폰 used 처리까지 한 트랜잭션으로 묶음
-    
-    cart = get_or_create_cart_by_table_usage(table_usage_id)
-
-    if cart.status != Cart.Status.PENDING:
-        _validate_required_fee_for_first_round(cart)
-        raise CartError(
-            "결제 진행 중인(PENDING) 상태에서만 확정할 수 있습니다.",
-            "CART_NOT_PENDING",
-            status_code=409,
-        )
-
-    # 1) 최신 가격 동기화 + subtotal 확정
+def _finalize_payment_core(cart: Cart):
     subtotal = recalc_cart_price(cart)
 
-    # 2) 재고 재검증 + (동시성) 관련 메뉴 row 잠금
-    #    결제 확정 직전에 재고가 바뀌었을 수 있으니 마지막 가드 필요
-    #    그리고 이후 stock 차감이 들어가므로 select_for_update로 잠그려고 함 !!!!!!!!!!
     cart_items = list(
         cart.items.select_related("menu", "setmenu").prefetch_related("setmenu__items__menu")
     )
@@ -629,7 +610,6 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
         for comp in comps:
             set_components.setdefault(comp.set_menu_id, []).append(comp)
 
-        # 세트 구성품 메뉴도 locked_menus에 넣어두기
         comp_menu_ids = list({comp.menu_id for comp in comps})
         extra_menus = Menu.objects.select_for_update().filter(id__in=comp_menu_ids)
         for m in extra_menus:
@@ -639,14 +619,12 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
         menu = locked_menus[menu_id]
         _validate_menu_stock(menu, want_qty)
 
-    # 3) 쿠폰(예약) 확인 + 결제액 확정 + used_at 최종 처리
-    #    apply/cancel은 예약만. 확정(주문 생성) 시점에만 used_at을 찍어야 함.
     discount_total = 0
-    applied_code = None
     applied_coupon = None
 
     try:
-        from coupon.models import CartCouponApply  # 순환 import 최소화: 함수 내부 import
+        from coupon.models import CartCouponApply
+
         applied = (
             CartCouponApply.objects.select_for_update()
             .filter(cart=cart, round=cart.round)
@@ -657,7 +635,6 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
             applied_code = applied.coupon_code
             applied_coupon = applied_code.coupon
 
-            # 이미 used면(다른 주문에서 확정된 코드) 충돌 처리
             if applied_code.used_at is not None:
                 raise CartError(
                     "이미 사용된 쿠폰 코드입니다.",
@@ -665,9 +642,12 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
                     status_code=409,
                 )
 
-            discount_total = _calc_discount(subtotal, applied_coupon.discount_type, applied_coupon.discount_value)
+            discount_total = _calc_discount(
+                subtotal,
+                applied_coupon.discount_type,
+                applied_coupon.discount_value,
+            )
 
-            # 결제 확정 시점에만 used_at 기록
             applied_code.used_at = timezone.now()
             applied_code.save(update_fields=["used_at"])
     except CartError:
@@ -677,18 +657,16 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
 
     order_price = subtotal - discount_total
 
-    # 4) Order 생성 + OrderItem 생성
     order = Order.objects.create(
         table_usage=cart.table_usage,
         cart=cart,
         order_price=order_price,
         original_price=subtotal,
         total_discount=discount_total,
-        coupon_id=(applied_coupon.id if applied_coupon else None),  # 모델 help_text는 "Spring 관리"지만 우선 로깅용으로라도 박아두는 게 유용
+        coupon_id=(applied_coupon.id if applied_coupon else None),
         order_status="PAID",
     )
 
-    # OrderItem 생성 + 재고 차감까지 같이 처리
     for it in cart_items:
         if it.menu_id:
             if it.menu.category == Menu.Category.FEE:
@@ -743,13 +721,52 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
                 child_menu.stock = F("stock") - child_qty
                 child_menu.save(update_fields=["stock"])
 
-    # 5) Booth.total_revenues 반영
     booth = cart.table_usage.table.booth
     Booth.objects.filter(pk=booth.pk).update(total_revenues=F("total_revenues") + order_price)
 
-    # 6) Cart 상태/라운드/아이템 정리 (재사용 정책)
+    return order
+
+@transaction.atomic
+def confirm_payment_and_mark_ordered(*, table_usage_id: int) -> Cart:
+    cart = get_or_create_cart_by_table_usage(table_usage_id)
+
+    if cart.status != Cart.Status.PENDING:
+        raise CartError(
+            "결제 진행 중인(PENDING) 상태에서만 확정할 수 있습니다.",
+            "CART_NOT_PENDING",
+            status_code=409,
+        )
+
+    _finalize_payment_core(cart)
+
     cart.status = Cart.Status.ORDERED
-    cart.save(update_fields=["status"])
+    cart.pending_expires_at = None
+    cart.save(update_fields=["status", "pending_expires_at"])
+
+    final_table_usage_id = cart.table_usage_id
+
+    from .services_ws import broadcast_cart_event
+
+    transaction.on_commit(
+        lambda: broadcast_cart_event(
+            table_usage_id=final_table_usage_id,
+            event_type="CART_PAYMENT_CONFIRMED",
+            message="결제가 확인되어 주문이 완료되었습니다.",
+        )
+    )
+
+    return cart
+
+@transaction.atomic
+def reset_ordered_cart(*, table_usage_id: int) -> Cart:
+    cart = get_or_create_cart_by_table_usage(table_usage_id)
+
+    if cart.status != Cart.Status.ORDERED:
+        raise CartError(
+            "주문 완료(ORDERED) 상태에서만 장바구니를 초기화할 수 있습니다.",
+            "CART_NOT_ORDERED",
+            status_code=409,
+        )
 
     cart.items.all().delete()
 
@@ -757,11 +774,11 @@ def finalize_payment_and_rotate_cart(*, table_usage_id: int) -> Cart:
     cart.status = Cart.Status.ACTIVE
     cart.pending_expires_at = None
     cart.save(update_fields=["round", "status", "pending_expires_at"])
-    
+
     final_table_usage_id = cart.table_usage_id
 
     from .services_ws import broadcast_cart_event
-    
+
     transaction.on_commit(
         lambda: broadcast_cart_event(
             table_usage_id=final_table_usage_id,
