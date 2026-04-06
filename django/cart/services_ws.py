@@ -4,7 +4,13 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from table.models import TableUsage
-from cart.services import *
+from cart.services import (
+    get_or_create_cart_by_table_usage,
+    recalc_cart_price,
+    _calc_discount,
+    _is_fee_booth,         
+    _can_add_fee_in_this_round
+)
 
 logger = logging.getLogger(__name__)
 
