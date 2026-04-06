@@ -25,6 +25,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         registry.addHandler(servingWebSocketHandler, "/ws/serving")
                 .setAllowedOriginPatterns(
                         "http://localhost:5173",
+                        "http://localhost:5174",
                         "https://dev.dorder-api.shop",
                         "http://dev.dorder-api.shop",
                         "https://*.dorder-api.shop"
@@ -34,6 +35,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         registry.addHandler(staffCallWebSocketHandler, "/ws/server/staffcall")
                 .setAllowedOriginPatterns(
                         "http://localhost:5173",
+                        "http://localhost:5174",
                         "https://dev.dorder-api.shop",
                         "http://dev.dorder-api.shop",
                         "https://*.dorder-api.shop"
@@ -43,6 +45,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         registry.addHandler(customerStaffCallWebSocketHandler, "/ws/customer/staffcall")
                 .setAllowedOriginPatterns(
                         "http://localhost:5173",
+                        "http://localhost:5174",
                         "https://dev.dorder-api.shop",
                         "http://dev.dorder-api.shop",
                         "https://*.dorder-api.shop"
