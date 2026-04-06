@@ -107,7 +107,7 @@ def _sync_item_prices_to_latest(cart: Cart) -> None:
         SetMenu.objects.filter(pk=OuterRef("setmenu_id")).values("price")[:1]
     )
 
-    qs = CartItem.objects.select_for_update().filter(cart=cart)
+    qs = CartItem.objects.filter(cart=cart)
     qs.update(
         price_at_cart=Case(
             When(menu__isnull=False, then=menu_price_subquery),
