@@ -282,7 +282,7 @@ def add_to_cart(*, table_usage_id: int, type: str, quantity: int, menu_id: int =
 
         menu = get_object_or_404(Menu.objects.select_for_update(), id=menu_id)
 
-        if menu.booth_id != booth.id:
+        if menu.booth_id != booth.pk:
             raise CartError(
                 "현재 부스의 메뉴만 담을 수 있습니다.",
                 "MENU_BOOTH_MISMATCH",
@@ -360,7 +360,7 @@ def add_to_cart(*, table_usage_id: int, type: str, quantity: int, menu_id: int =
 
         setmenu = get_object_or_404(SetMenu.objects.select_for_update(), id=set_menu_id)
 
-        if setmenu.booth_id != booth.id:
+        if setmenu.booth_id != booth.pk:
             raise CartError(
                 "현재 부스의 세트메뉴만 담을 수 있습니다.",
                 "SETMENU_BOOTH_MISMATCH",
