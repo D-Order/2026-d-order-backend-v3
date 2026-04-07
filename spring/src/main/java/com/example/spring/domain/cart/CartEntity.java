@@ -19,4 +19,8 @@ public class CartEntity {
 
     @Column(name = "table_usage_id", nullable = false)
     private Long tableUsageId;
+
+    /** Django cart_cart.cart_price — 장바구니 총 금액 */
+    @Column(name = "cart_price", nullable = false)
+    private Integer cartPrice;
 }

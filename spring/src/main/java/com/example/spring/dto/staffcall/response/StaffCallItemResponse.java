@@ -21,6 +21,15 @@ public class StaffCallItemResponse {
     @JsonProperty("cart_id")
     private Long cartId;
 
+    @JsonProperty("table_usage_id")
+    private Long tableUsageId;
+
+    @JsonProperty("table_num")
+    private Integer tableNum;
+
+    @JsonProperty("cart_price")
+    private Integer cartPrice;
+
     @JsonProperty("call_type")
     private String callType;
 
@@ -49,6 +58,9 @@ public class StaffCallItemResponse {
                 .staffCallId(sc.getId())
                 .tableId(sc.getTableId())
                 .cartId(sc.getCartId())
+                .tableUsageId(sc.getTableUsageId())
+                .tableNum(sc.getTableNum())
+                .cartPrice(sc.getCartPrice())
                 .callType(sc.getCallType())
                 .category(sc.getCategory() != null ? sc.getCategory().name() : null)
                 .status(sc.getStatus() != null ? sc.getStatus().name() : null)
