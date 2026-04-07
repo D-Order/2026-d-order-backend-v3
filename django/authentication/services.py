@@ -1,6 +1,8 @@
 """
 인증 관련 비즈니스 로직
 """
+import uuid
+
 import jwt
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -58,6 +60,7 @@ class AuthService:
         """
         
         token = TokenObtainPairSerializer.get_token(user)
+        token['session_id'] = str(uuid.uuid4())
 
         return {
             'access_token': str(token.access_token),
