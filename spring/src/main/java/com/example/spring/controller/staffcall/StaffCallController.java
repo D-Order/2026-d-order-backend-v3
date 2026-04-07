@@ -2,6 +2,7 @@ package com.example.spring.controller.staffcall;
 
 import com.example.spring.dto.staffcall.request.StaffCallAcceptRequest;
 import com.example.spring.dto.staffcall.request.StaffCallCancelRequest;
+import com.example.spring.dto.staffcall.request.StaffCallCompleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.request.StaffCallListRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
@@ -73,6 +74,24 @@ public class StaffCallController {
                     "message", "호출을 수락했습니다.",
                     "data", data
             ));
+        } catch (StaffCallConflictException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/v3/spring/server/staffcall/complete
+     * 수락된 호출을 완료 처리 → Redis로 Django에 결제확인 이벤트 발행
+     */
+    @PostMapping("/staffcall/complete")
+    public ResponseEntity<Map<String, Object>> complete(
+            @RequestBody StaffCallCompleteRequest body,
+            HttpServletRequest request) {
+        try {
+            Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
+            return ResponseEntity.ok(staffCallService.complete(boothId, body));
         } catch (StaffCallConflictException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {

@@ -30,6 +30,15 @@ public class StaffCallRedisMessageDto {
     @JsonProperty("cart_id")
     private Long cartId;
 
+    @JsonProperty("table_usage_id")
+    private Long tableUsageId;
+
+    @JsonProperty("table_num")
+    private Integer tableNum;
+
+    @JsonProperty("cart_price")
+    private Integer cartPrice;
+
     @JsonProperty("call_type")
     private String callType;
 

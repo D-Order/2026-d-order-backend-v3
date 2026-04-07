@@ -25,6 +25,18 @@ public class StaffCall {
     @Column(name = "cart_id", nullable = false)
     private Long cartId;
 
+    /** Django cart.table_usage_id — 결제확인 시 Django에 전달하기 위한 비정규화 */
+    @Column(name = "table_usage_id")
+    private Long tableUsageId;
+
+    /** Django table_table.table_num — 프론트 표시용 테이블 번호 */
+    @Column(name = "table_num")
+    private Integer tableNum;
+
+    /** Django cart_cart.cart_price — 결제확인 모달 금액 표시용 */
+    @Column(name = "cart_price")
+    private Integer cartPrice;
+
     /** 비즈니스 호출 종류(물, 계산서 등) */
     @Column(name = "call_type", nullable = false, length = 64)
     private String callType;
@@ -57,9 +69,13 @@ public class StaffCall {
     private Long version;
 
     @Builder
-    public StaffCall(Long boothId, Long tableId, Long cartId, String callType, StaffCallCategory category) {
+    public StaffCall(Long boothId, Long tableId, Long tableUsageId, Integer tableNum, Integer cartPrice,
+                     Long cartId, String callType, StaffCallCategory category) {
         this.boothId = boothId;
         this.tableId = tableId;
+        this.tableUsageId = tableUsageId;
+        this.tableNum = tableNum;
+        this.cartPrice = cartPrice;
         this.cartId = cartId;
         this.callType = callType;
         this.category = category;
@@ -80,5 +96,11 @@ public class StaffCall {
         this.acceptedAt = null;
         this.acceptedBy = null;
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public void complete() {
+        this.status = StaffCallStatus.COMPLETED;
+        this.completedAt = LocalDateTime.now();
+        this.updatedAt = this.completedAt;
     }
 }

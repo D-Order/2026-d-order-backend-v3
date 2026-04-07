@@ -9,6 +9,7 @@ import com.example.spring.domain.table.TableUsageEntity;
 import com.example.spring.dto.redis.StaffCallRedisMessageDto;
 import com.example.spring.dto.staffcall.request.StaffCallAcceptRequest;
 import com.example.spring.dto.staffcall.request.StaffCallCancelRequest;
+import com.example.spring.dto.staffcall.request.StaffCallCompleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
 import com.example.spring.dto.staffcall.response.StaffCallItemResponse;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -141,6 +143,44 @@ public class StaffCallService {
     }
 
     @Transactional
+    public Map<String, Object> complete(Long boothId, StaffCallCompleteRequest req) {
+        if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null) {
+            throw new IllegalArgumentException("table_id, cart_id, call_type은 필수입니다.");
+        }
+
+        StaffCall sc = staffCallRepository
+                .findByTableCartCallTypeForUpdate(req.getTableId(), req.getCartId(), req.getCallType())
+                .orElseThrow(() -> new IllegalArgumentException("해당 호출을 찾을 수 없습니다."));
+
+        if (!boothId.equals(sc.getBoothId())) {
+            throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
+        }
+
+        if (sc.getStatus() != StaffCallStatus.ACCEPTED) {
+            if (sc.getStatus() == StaffCallStatus.COMPLETED) {
+                throw new StaffCallConflictException("이미 완료된 요청입니다.");
+            }
+            throw new StaffCallConflictException("수락된 호출만 완료 처리할 수 있습니다.");
+        }
+
+        sc.complete();
+
+        publishRedis(sc, "staff_call_completed");
+        try {
+            staffCallWebSocketHandler.broadcastSnapshot(boothId,
+                    staffCallQueryService.listForBooth(boothId, 50, 0));
+            customerStaffCallWebSocketHandler.broadcastStatus(sc);
+        } catch (Exception e) {
+            log.error("[staffcall complete] 스냅샷 조회/WS 푸시 실패 — 완료는 반영됨 boothId={}", boothId, e);
+        }
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("message", "호출을 완료 처리했습니다.");
+        out.put("data", StaffCallItemResponse.from(sc));
+        return out;
+    }
+
+    @Transactional
     public Map<String, Object> emit(StaffCallEmitRequest req) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null || req.getCategory() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type, category는 필수입니다.");
@@ -167,15 +207,19 @@ public class StaffCallService {
             throw new IllegalArgumentException("비활성 테이블에서는 호출할 수 없습니다.");
         }
 
-        long pendingDup = staffCallRepository.countByTableIdAndCartIdAndCallTypeAndStatus(
-                actualTableId, req.getCartId(), req.getCallType(), StaffCallStatus.PENDING);
-        if (pendingDup > 0) {
-            throw new StaffCallConflictException("동일한 호출이 이미 대기 중입니다.");
+        long activeDup = staffCallRepository.countByTableIdAndCartIdAndCallTypeAndStatusIn(
+                actualTableId, req.getCartId(), req.getCallType(),
+                List.of(StaffCallStatus.PENDING, StaffCallStatus.ACCEPTED));
+        if (activeDup > 0) {
+            throw new StaffCallConflictException("동일한 호출이 이미 진행 중입니다.");
         }
 
         StaffCall sc = StaffCall.builder()
                 .boothId(boothId)
                 .tableId(actualTableId)
+                .tableUsageId(cart.getTableUsageId())
+                .tableNum(table.getTableNum())
+                .cartPrice(cart.getCartPrice())
                 .cartId(req.getCartId())
                 .callType(req.getCallType())
                 .category(req.getCategory())
@@ -211,6 +255,9 @@ public class StaffCallService {
                     .boothId(sc.getBoothId())
                     .tableId(sc.getTableId())
                     .cartId(sc.getCartId())
+                    .tableUsageId(sc.getTableUsageId())
+                    .tableNum(sc.getTableNum())
+                    .cartPrice(sc.getCartPrice())
                     .callType(sc.getCallType())
                     .category(sc.getCategory() != null ? sc.getCategory().name() : null)
                     .status(sc.getStatus() != null ? sc.getStatus().name() : null)

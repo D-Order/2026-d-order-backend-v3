@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,7 +23,8 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
     );
 
     @Query(value = """
-            SELECT sc.id, sc.booth_id, sc.table_id, sc.cart_id, sc.call_type, sc.category,
+            SELECT sc.id, sc.booth_id, sc.table_id, sc.cart_id, sc.table_usage_id, sc.table_num, sc.cart_price,
+                   sc.call_type, sc.category,
                    sc.status, sc.created_at, sc.updated_at, sc.accepted_at, sc.accepted_by, sc.completed_at, sc.version
             FROM staff_call sc
             WHERE sc.booth_id = :boothId
@@ -49,5 +51,12 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             Long cartId,
             String callType,
             StaffCallStatus status
+    );
+
+    long countByTableIdAndCartIdAndCallTypeAndStatusIn(
+            Long tableId,
+            Long cartId,
+            String callType,
+            Collection<StaffCallStatus> statuses
     );
 }
