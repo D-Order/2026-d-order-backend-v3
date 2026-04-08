@@ -137,7 +137,8 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
 class TableEnterAPIView(views.APIView):
     """손님용 테이블 입장 API (비인증)"""
     permission_classes = [AllowAny]
-
+    authentication_classes = []
+    
     def post(self, request, booth_id):
         """
         테이블 입장 처리
