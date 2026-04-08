@@ -50,6 +50,10 @@ class Command(BaseCommand):
                 if domain == "order":
                     self._handle_order_event(booth_id, action, data, channel_layer)
 
+                # ──── StaffCall 도메인 처리 ────
+                elif domain == "staffcall":
+                    self._handle_staffcall_event(booth_id, action, data, channel_layer)
+
                 # ──── 기타 도메인 → WebSocket 브로드캐스트 ────
                 else:
                     group_name = f"booth_{booth_id}.{domain}"
@@ -68,6 +72,35 @@ class Command(BaseCommand):
                 self.stderr.write(self.style.ERROR(f"메시지 처리 실패: {e}"))
                 import traceback
                 self.stderr.write(traceback.format_exc())
+
+    def _handle_staffcall_event(self, booth_id, action, data, channel_layer):
+        """StaffCall 도메인 이벤트 분기 처리"""
+
+        # 결제확인 완료: spring:booth:{id}:staffcall:completed
+        if action == "completed":
+            table_usage_id = data.get("table_usage_id")
+            call_type = data.get("call_type")
+
+            if call_type == "PAYMENT_CONFIRM" and table_usage_id:
+                try:
+                    from cart.services import confirm_payment_and_mark_ordered
+                    cart = confirm_payment_and_mark_ordered(table_usage_id=table_usage_id)
+                    self.stdout.write(self.style.SUCCESS(
+                        f"[결제확인] booth:{booth_id} table_usage:{table_usage_id} → Cart#{cart.id} ORDERED"
+                    ))
+                except Exception as e:
+                    self.stderr.write(self.style.ERROR(
+                        f"[결제확인 실패] booth:{booth_id} table_usage:{table_usage_id} → {e}"
+                    ))
+                    import traceback
+                    self.stderr.write(traceback.format_exc())
+
+        # 모든 staffcall 이벤트 → WebSocket 브로드캐스트
+        group_name = f"booth_{booth_id}.staffcall"
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {"type": action, "data": data}
+        )
 
     def _handle_order_event(self, booth_id, action, data, channel_layer):
         """Order 도메인 이벤트 분기 처리"""
