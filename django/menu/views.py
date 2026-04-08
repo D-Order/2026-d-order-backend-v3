@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -273,7 +273,8 @@ class UserMenuListAPIView(APIView):
     사용자 메뉴판 조회 API
     GET /api/v3/django/booth/<int:booth_id>/menu-list/?table_number=xxx
     """
-    permission_classes = []  # 로그인 없이 접근 가능
+    authentication_classes = []  # JWT 인증 비활성화
+    permission_classes = [AllowAny]  # 로그인 없이 접근 가능
     def get(self, request, booth_id):
         table_num = request.GET.get('table_num')
         booth = get_object_or_404(Booth, pk=booth_id)
