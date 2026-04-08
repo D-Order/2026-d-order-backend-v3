@@ -72,6 +72,7 @@ class BoothTableUsageResetAPIView(APIView):
 class BoothNameAPIView(APIView):
     """부스 이름 조회용"""
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def get(self,request, booth_id):
 

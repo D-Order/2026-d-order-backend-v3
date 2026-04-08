@@ -20,7 +20,8 @@ from authentication.serializers import UserBoothSignupSerializer
 class SignupAPIView(APIView):
     """회원가입"""
     permission_classes = [AllowAny]
-
+    authentication_classes = []
+    
     def post(self, request):
         """회원가입 처리"""
         # 1. 입력 검증 (Serializer)
@@ -69,7 +70,8 @@ class SignupAPIView(APIView):
 class CheckUsernameAPIView(APIView):
     """아이디 중복 체크"""
     permission_classes = [AllowAny]
-
+    authentication_classes = []
+    
     def get(self, request):
         """아이디 사용 가능 여부 확인"""
         username = request.query_params.get("username")
@@ -93,7 +95,8 @@ class CheckUsernameAPIView(APIView):
 class AuthAPIView(APIView):
     """로그인 / 로그아웃"""
     permission_classes = [AllowAny]
-
+    authentication_classes = []
+    
     def post(self, request):
         """로그인 처리"""
         username = request.data.get("username")
@@ -144,7 +147,8 @@ class AuthAPIView(APIView):
 class TokenRefreshAPIView(APIView):
     """토큰 검증 & 재발급"""
     permission_classes = [AllowAny]
-
+    authentication_classes = []
+    
     def post(self, request):
         """토큰 검증 또는 재발급"""
 
@@ -215,7 +219,8 @@ class CsrfTokenView(APIView):
     POST/PUT/PATCH/DELETE 요청 시 X-CSRFToken 헤더에 포함 필요
     """
     permission_classes = [AllowAny]
-
+    authentication_classes = []
+    
     def get(self, request):
         """CSRF 토큰 발급"""
         csrf_token = get_token(request)
