@@ -15,7 +15,7 @@ import java.util.Optional;
 public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT sc FROM StaffCall sc WHERE sc.tableId = :tableId AND sc.cartId = :cartId AND sc.callType = :callType")
+    @Query("SELECT sc FROM StaffCall sc WHERE sc.tableId = :tableId AND sc.cartId = :cartId AND sc.callType = :callType AND sc.status IN ('PENDING', 'ACCEPTED')")
     Optional<StaffCall> findByTableCartCallTypeForUpdate(
             @Param("tableId") Long tableId,
             @Param("cartId") Long cartId,
