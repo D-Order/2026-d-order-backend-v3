@@ -40,6 +40,7 @@ class CartAddAPIView(APIView):
     """
     POST /api/v3/django/cart/
     """
+    authentication_classes = []
 
     def post(self, request):
         serializer = AddToCartSerializer(data=request.data)
@@ -93,6 +94,7 @@ class CartDetailAPIView(APIView):
     """
     GET /api/v3/django/cart/detail/?table_usage_id=31
     """
+    authentication_classes = []
 
     def get(self, request):
         query_serializer = CartDetailQuerySerializer(data=request.query_params)
@@ -197,6 +199,7 @@ class CartUpdateQuantityAPIView(APIView):
     """
     PATCH /api/v3/django/cart/menu/
     """
+    authentication_classes = []
 
     def patch(self, request):
         serializer = UpdateQuantitySerializer(data=request.data)
@@ -230,6 +233,7 @@ class CartDeleteItemAPIView(APIView):
     """
     DELETE /api/v3/django/cart/menu/delete/
     """
+    authentication_classes = []
 
     def delete(self, request):
         serializer = DeleteItemSerializer(data=request.data)
@@ -258,6 +262,7 @@ class CartPaymentInfoAPIView(APIView):
     """
     POST /api/v3/django/cart/payment-info/
     """
+    authentication_classes = []
 
     def post(self, request):
         serializer = PaymentInfoSerializer(data=request.data)
@@ -297,6 +302,7 @@ class CartPaymentCancelAPIView(APIView):
     """
     POST /api/v3/django/cart/payment-cancel/
     """
+    authentication_classes = []
 
     def post(self, request):
         serializer = PaymentCancelSerializer(data=request.data)
@@ -330,6 +336,7 @@ class CartPaymentConfirmAPIView(APIView):
     POST /api/v3/django/cart/payment-confirm/
     운영진이 결제 확인 슬라이드 완료 시 호출
     """
+    authentication_classes = []
 
     def post(self, request):
         serializer = PaymentConfirmSerializer(data=request.data)
@@ -364,6 +371,7 @@ class CartResetAPIView(APIView):
     POST /api/v3/django/cart/reset/
     주문 완료 화면 처리 후 cart를 새 round로 초기화
     """
+    authentication_classes = []
 
     def post(self, request):
         serializer = CartResetSerializer(data=request.data)
