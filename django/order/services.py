@@ -702,6 +702,8 @@ class OrderService:
             today_revenue = update_today_revenue(booth_id, order.order_price)
 
             group_name = f"booth_{booth_id}.order"
+            logger.info(f"[WebSocket] group_send 시도: {group_name}")
+            
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
                 {
@@ -717,6 +719,8 @@ class OrderService:
                     }
                 }
             )
+            logger.info(f"[WebSocket] admin_new_order 전송 완료: order_id={order.pk}")
+            
             # 오늘 매출 갱신 이벤트 (계산된 값 포함 → Consumer DB 쿼리 불필요)
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
