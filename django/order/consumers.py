@@ -227,6 +227,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
 
         def _query():
             # 리프 아이템: menu가 있고, 세트메뉴 부모(parent=None, setmenu≠None)가 아닌 것
+            # FEE 카테고리는 제외 (테이블 이용료는 메뉴 집계에서 제외)
             qs = (
                 OrderItem.objects
                 .filter(
@@ -236,6 +237,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                     menu__isnull=False,
                 )
                 .exclude(parent__isnull=True, setmenu__isnull=False)
+                .exclude(menu__category="FEE")
                 .select_related("menu")
             )
 
@@ -298,6 +300,10 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
 
             items = []
             for item in top_items:
+                # FEE 카테고리는 운영진 대시보드에서 제외
+                if item.menu_id and item.menu and item.menu.category == "FEE":
+                    continue
+                
                 if item.setmenu_id:
                     # 세트메뉴 → 자식 OrderItem 개별 직렬화
                     set_menu_name = item.setmenu.name
