@@ -100,40 +100,45 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         OrderService.create_order_from_event 에서 group_send 로 호출.
         event["data"]["order_id"] 로 DB에서 직접 조회 후 직렬화.
         """
-        data = event.get("data", {})
-        order_id = data.get("order_id")
+        try:
+            data = event.get("data", {})
+            order_id = data.get("order_id")
+            logger.warning(f"🔥 [Consumer] ADMIN_NEW_ORDER 수신: order_id={order_id}")
 
-        if order_id:
+            if not order_id:
+                logger.warning(f"🔥 [Consumer] order_id 없음: {data}")
+                return
+
             order = await sync_to_async(
                 lambda: Order.objects
                 .filter(pk=order_id)
                 .select_related("table_usage__table")
                 .first()
             )()
-            if order:
-                serialized = await self._serialize_order(order)
-                total_sales = await self._get_total_sales()
-                await self.send_json({
-                    "type": "ADMIN_NEW_ORDER",
-                    "timestamp": timezone.localtime().isoformat(),
-                    "data": {
-                        "total_sales": total_sales,
-                        "orders": [serialized],
-                    },
-                })
-                await self.send_menu_aggregation()
+            
+            if not order:
+                logger.warning(f"🔥 [Consumer] Order {order_id}를 찾을 수 없음")
                 return
-
-        # order_id 가 없거나 조회 실패 시 빈 배열
-        total_sales = await self._get_total_sales()
-        await self.send_json({
-            "type": "ADMIN_NEW_ORDER",
-            "timestamp": timezone.localtime().isoformat(),
-            "data": {
-                "total_sales": total_sales,
-                "orders": [],
-            },
-        })
+                
+            logger.warning(f"🔥 [Consumer] Order 직렬화 중: order_id={order_id}")
+            serialized = await self._serialize_order(order)
+            total_sales = await self._get_total_sales()
+            
+            response = {
+                "type": "ADMIN_NEW_ORDER",
+                "timestamp": timezone.localtime().isoformat(),
+                "data": {
+                    "total_sales": total_sales,
+                    "orders": [serialized],
+                },
+            }
+            
+            await self.send_json(response)
+            logger.warning(f"🔥 [Consumer] 클라이언트에게 전송 완료: order_id={order_id}")
+            await self.send_menu_aggregation()
+            
+        except Exception as e:
+            logger.error(f"🔥 [Consumer] 오류: {e}", exc_info=True)
 
     # ───────────────────────────────────────────
     # ③ ADMIN_ORDER_UPDATE (group_send handler)
