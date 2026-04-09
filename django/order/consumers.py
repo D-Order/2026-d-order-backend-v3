@@ -221,9 +221,9 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         """
         DB에서 메뉴별 수량 집계 조회.
         리프 아이템만 대상 (세트메뉴 부모 제외, 자식 OrderItem + 일반 메뉴).
-        status가 COOKING, COOKED, SERVING인 것만 대상.
+        조리중(COOKING) 상태인 것만 대상. 조리완료되면 집계에서 제외됨.
         """
-        active_statuses = ["COOKING", "COOKED", "SERVING"]
+        active_statuses = ["COOKING"]  # 조리중인 것만
 
         def _query():
             # 리프 아이템: menu가 있고, 세트메뉴 부모(parent=None, setmenu≠None)가 아닌 것
