@@ -1,5 +1,6 @@
 from datetime import timedelta
 from django.db import transaction
+from asgiref.sync import async_to_sync
 from django.db.models import F, Sum, Case, When, IntegerField, OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -723,6 +724,10 @@ def _finalize_payment_core(cart: Cart):
 
     booth = cart.table_usage.table.booth
     Booth.objects.filter(pk=booth.pk).update(total_revenues=F("total_revenues") + order_price)
+    
+    table_usage = TableUsage.objects.select_for_update().get(pk=cart.table_usage_id)
+    table_usage.accumulated_amount += order.order_price
+    table_usage.save(update_fields=["accumulated_amount"])
 
     return order
 
@@ -737,23 +742,39 @@ def confirm_payment_and_mark_ordered(*, table_usage_id: int) -> Cart:
             status_code=409,
         )
 
-    _finalize_payment_core(cart)
+    order = _finalize_payment_core(cart)
 
     cart.status = Cart.Status.ORDERED
     cart.pending_expires_at = None
     cart.save(update_fields=["status", "pending_expires_at"])
 
     final_table_usage_id = cart.table_usage_id
+    booth_id = cart.table_usage.table.booth_id
 
     from .services_ws import broadcast_cart_event
+    from order.cache import update_today_revenue
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
 
-    transaction.on_commit(
-        lambda: broadcast_cart_event(
+    def _after_commit():
+        today_revenue = update_today_revenue(booth_id, order.order_price)
+
+        group_name = f"booth_{booth_id}.order"
+        async_to_sync(get_channel_layer().group_send)(
+            group_name,
+            {
+                "type": "total_sales_update",
+                "data": {"today_revenue": today_revenue},
+            }
+        )
+
+        broadcast_cart_event(
             table_usage_id=final_table_usage_id,
             event_type="CART_PAYMENT_CONFIRMED",
             message="결제가 확인되어 주문이 완료되었습니다.",
         )
-    )
+
+    transaction.on_commit(_after_commit)
 
     return cart
 
