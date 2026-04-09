@@ -54,7 +54,7 @@ class Booth(models.Model):
             self.qr_image.delete(save=False)
 
         
-        qr_data = f"https://{settings.CUSTOMER_FRONT_BASE_URL}/?id={self.pk}"  #TODO : 부스 고유 URL로 변경
+        qr_data = f"https://{settings.CUSTOMER_FRONT_BASE_URL}/?id={self.pk}"  
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(qr_data)
         qr.make(fit=True)
