@@ -699,7 +699,9 @@ class OrderService:
             from order.cache import update_today_revenue
 
             booth_id = table_usage.table.booth_id
-            today_revenue = update_today_revenue(booth_id, order.order_price)
+            # order.order_price를 int로 변환 (Decimal → int)
+            order_price_int = int(order.order_price)
+            today_revenue = update_today_revenue(booth_id, order_price_int)
 
             group_name = f"booth_{booth_id}.order"
             logger.info(f"[WebSocket] group_send 시도: {group_name}")
@@ -712,19 +714,19 @@ class OrderService:
                         "order_id": order.pk,
                         "cart_id": cart_id,
                         "table_usage_id": table_usage_id,
-                        "order_price": order.order_price,
-                        "original_price": order.original_price,
-                        "total_discount": order.total_discount,
+                        "order_price": order_price_int,
+                        "original_price": int(order.original_price) if order.original_price else 0,
+                        "total_discount": int(order.total_discount) if order.total_discount else 0,
                         "order_status": order.order_status,
                     }
                 }
             )
             logger.info(f"[WebSocket] admin_new_order 전송 완료: order_id={order.pk}")
             
-            # 오늘 매출 갱신 이벤트 (계산된 값 포함 → Consumer DB 쿼리 불필요)
+            # 오늘 매출 갱신 이벤트 (int 값으로 전달)
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
-                {"type": "total_sales_update", "data": {"today_revenue": today_revenue}}
+                {"type": "total_sales_update", "data": {"today_revenue": int(today_revenue)}}
             )
         except Exception as ws_err:
             logger.error(f"[Order] WebSocket 전송 실패 (주문은 정상 생성됨): {ws_err}")
@@ -738,6 +740,9 @@ class OrderService:
             )
         except Exception as e:
             logger.error(f"[Order] 테이블 WS 브로드캐스트 실패 (주문은 정상 생성됨): {e}")
+
+        # ✅ 주문 생성 성공 반환
+        return {"result": "success", "order_id": order.pk}
 
     # ─────────────────────────────────────────────
     # 결제요청 거절 → Cart 복구 (order.cancelled)
