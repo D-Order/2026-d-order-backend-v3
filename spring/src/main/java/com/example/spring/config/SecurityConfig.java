@@ -91,12 +91,15 @@ public class SecurityConfig {
                 "https://127.0.0.1:5173",
                 "http://127.0.0.1:5174",
                 "https://127.0.0.1:5174",
+                "http://localhost:5175",
+                "https://localhost:5175",
+                "http://127.0.0.1:5175",
+                "https://127.0.0.1:5175",
                 "https://dev.dorder-api.shop",
                 "http://dev.dorder-api.shop",
                 "https://admin.dorder-api.shop",
                 "https://customer.dorder-api.shop",
-                "https://server.dorder-api.shop",
-                "https://d-order-server.netlify.app"
+                "https://server.dorder-api.shop"
         ));
 
         // 허용할 HTTP 메서드
