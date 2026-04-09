@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 
 # For QR
 import qrcode
+from django.conf import settings
 from io import BytesIO
 from django.core.files.base import ContentFile
 
@@ -52,7 +53,8 @@ class Booth(models.Model):
         if self.qr_image:
             self.qr_image.delete(save=False)
 
-        qr_data = f"https://frontend-url.com/booth/{self.pk}/"  #TODO : 부스 고유 URL로 변경
+        
+        qr_data = f"https://{settings.CUSTOMER_FRONT_BASE_URL}/?id={self.pk}"  #TODO : 부스 고유 URL로 변경
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(qr_data)
         qr.make(fit=True)
