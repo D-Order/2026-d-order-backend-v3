@@ -1,11 +1,11 @@
 package com.example.spring.service.serving;
 
-import com.example.spring.websocket.ServingWebSocketHandler;
 import com.example.spring.domain.serving.ServingStatus;
 import com.example.spring.domain.serving.ServingTask;
 import com.example.spring.dto.redis.ServingStatusMessageDto;
-import com.example.spring.dto.serving.response.ServingTaskResponse; // 🌟 이 부분이 추가되었습니다!
+import com.example.spring.dto.serving.response.ServingTaskResponse;
 import com.example.spring.repository.serving.ServingTaskRepository;
+import com.example.spring.websocket.ServingWebSocketHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,10 +29,12 @@ public class ServingTaskService {
 
     @Transactional(readOnly = true)
     public List<ServingTask> getPendingServingCalls(Long boothId) {
-        return servingTaskRepository.findByStatusOrderByRequestedAtAsc(ServingStatus.SERVE_REQUESTED);
+        return servingTaskRepository.findByBoothIdAndStatusOrderByRequestedAtAsc(
+                boothId,
+                ServingStatus.SERVE_REQUESTED
+        );
     }
 
-    // 🌟 수정됨: 서빙 수락 (Redis 선착순 락 적용)
     @Transactional
     public void catchCall(Long taskId, Long boothId, String catchedBy) {
         String lockKey = "lock:serving_task:" + taskId;
@@ -47,6 +49,10 @@ public class ServingTaskService {
             ServingTask task = servingTaskRepository.findById(taskId)
                     .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 서빙 요청입니다. taskId=" + taskId));
 
+            if (!task.getBoothId().equals(boothId)) {
+                throw new IllegalStateException("해당 부스의 서빙 요청이 아닙니다.");
+            }
+
             if (task.getStatus() != ServingStatus.SERVE_REQUESTED) {
                 throw new IllegalStateException("이미 처리된 요청입니다.");
             }
@@ -54,10 +60,7 @@ public class ServingTaskService {
             String actor = (catchedBy != null && !catchedBy.isEmpty()) ? catchedBy : "STAFF";
             task.acceptServing(actor);
 
-            // 1. 장고 측으로 Redis 메시지 발행
             publishToDjango(boothId, "serving", task.getOrderItemId(), actor);
-
-            // 2. 🌟 프론트엔드로 웹소켓 브로드캐스트 (CATCH_CALL 이벤트)
             webSocketHandler.broadcastEvent("CATCH_CALL", ServingTaskResponse.from(task));
 
         } finally {
@@ -67,39 +70,49 @@ public class ServingTaskService {
 
     @Transactional
     public void completeCall(Long taskId, Long boothId) {
-        ServingTask task = servingTaskRepository.findById(taskId).orElseThrow();
+        ServingTask task = servingTaskRepository.findById(taskId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 서빙 요청입니다. taskId=" + taskId));
+
+        if (!task.getBoothId().equals(boothId)) {
+            throw new IllegalStateException("해당 부스의 서빙 요청이 아닙니다.");
+        }
+
         task.completeServing();
 
         publishToDjango(boothId, "served", task.getOrderItemId(), null);
-
-        // 🌟 프론트엔드로 웹소켓 브로드캐스트 (COMPLETE_CALL 이벤트)
         webSocketHandler.broadcastEvent("COMPLETE_CALL", ServingTaskResponse.from(task));
     }
 
     @Transactional
     public void cancelCall(Long taskId, Long boothId) {
-        ServingTask task = servingTaskRepository.findById(taskId).orElseThrow();
+        ServingTask task = servingTaskRepository.findById(taskId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 서빙 요청입니다. taskId=" + taskId));
+
+        if (!task.getBoothId().equals(boothId)) {
+            throw new IllegalStateException("해당 부스의 서빙 요청이 아닙니다.");
+        }
+
         task.cancelServing();
 
         publishToDjango(boothId, "cooked", task.getOrderItemId(), null);
-
-        // 🌟 프론트엔드로 웹소켓 브로드캐스트 (CANCEL_CALL 이벤트)
         webSocketHandler.broadcastEvent("CANCEL_CALL", ServingTaskResponse.from(task));
     }
 
-    // 장고(Django) -> 스프링(Spring) : 새 조리 완료 알림이 왔을 때 호출될 메서드
+    /**
+     * Django -> Spring : 조리 완료 알림 수신 시 새 serving_task 생성
+     */
     @Transactional
-    public void createNewServingTask(Long orderItemId, String key) {
-        // 1. 새 태스크 생성 및 저장
+    public void createNewServingTask(Long boothId, Long orderItemId, String key) {
         ServingTask newTask = ServingTask.builder()
+                .boothId(boothId)
                 .orderItemId(orderItemId)
                 .key(key)
                 .build();
+
         servingTaskRepository.save(newTask);
 
-        // 2. 🌟 프론트엔드로 웹소켓 브로드캐스트 (NEW_CALL 이벤트)
         webSocketHandler.broadcastEvent("NEW_CALL", ServingTaskResponse.from(newTask));
-        log.info("[새 서빙 요청 생성 및 브로드캐스트] orderItemId: {}", orderItemId);
+        log.info("[새 서빙 요청 생성 및 브로드캐스트] boothId={}, orderItemId={}", boothId, orderItemId);
     }
 
     private void publishToDjango(Long boothId, String status, Long orderItemId, String catchedBy) {

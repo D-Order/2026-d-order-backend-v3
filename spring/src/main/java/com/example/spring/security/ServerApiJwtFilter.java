@@ -15,7 +15,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * {@code /server/**} 서버(직원) API — (기본) access_token 쿠키 필수
+ * {@code /server/**}, {@code /serving/**} 서버(직원/서빙) API — (기본) access_token 쿠키 필수
  * <p>
  * 단, 직원 호출 등록(emit)은 인증을 강제하지 않음
  */
@@ -31,11 +31,15 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+
         String path = request.getRequestURI();
-        if (!path.startsWith("/server/")) {
+
+        // 기존 개발자가 만들어둔 isProtectedPath 활용하여 /server/ 및 /serving/ 모두 필터 적용
+        if (!isProtectedPath(path)) {
             filterChain.doFilter(request, response);
             return;
         }
+
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             filterChain.doFilter(request, response);
             return;
@@ -55,6 +59,7 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
             response.getWriter().write("{\"message\":\"인증이 필요합니다.\"}");
             return;
         }
+
         try {
             Long boothId = jwtUtil.getBoothIdFromToken(token);
             request.setAttribute(ATTR_BOOTH_ID, boothId);
@@ -66,7 +71,12 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
             response.getWriter().write("{\"message\":\"유효하지 않은 토큰입니다.\"}");
             return;
         }
+
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isProtectedPath(String path) {
+        return path.startsWith("/server/") || path.startsWith("/serving/");
     }
 
     private boolean isStaffCallPublicPath(String path) {

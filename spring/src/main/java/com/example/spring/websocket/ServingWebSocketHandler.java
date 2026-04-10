@@ -17,11 +17,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor // 🌟 ObjectMapper 주입을 위해 추가
+@RequiredArgsConstructor
 public class ServingWebSocketHandler extends TextWebSocketHandler {
 
     private final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
-    private final ObjectMapper objectMapper; // 🌟 JSON 변환용 객체
+    private final ObjectMapper objectMapper;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -35,7 +35,6 @@ public class ServingWebSocketHandler extends TextWebSocketHandler {
         log.info("[웹소켓 해제] 태블릿 연결 끊김: {}", session.getId());
     }
 
-    // 기존의 단순 문자열 전송 메서드
     public void broadcastMessage(String message) {
         TextMessage textMessage = new TextMessage(message);
         for (WebSocketSession session : sessions) {
@@ -49,12 +48,11 @@ public class ServingWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    // 🌟 추가된 부분: 프론트엔드가 파싱하기 편하도록 JSON 구조(type, data)로 쏴주는 메서드
     public void broadcastEvent(String eventType, Object data) {
         try {
             Map<String, Object> payload = new HashMap<>();
-            payload.put("type", eventType); // 예: "CATCH_CALL", "NEW_CALL"
-            payload.put("data", data);      // 예: ServingTaskResponse 객체
+            payload.put("type", eventType);
+            payload.put("data", data);
 
             String jsonMessage = objectMapper.writeValueAsString(payload);
             broadcastMessage(jsonMessage);
