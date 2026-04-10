@@ -15,11 +15,12 @@ public class RedisSubscriber implements MessageListener {
         this.eventPublisher = eventPublisher;
     }
 
-@Override
-public void onMessage(Message message, byte[] pattern) {
-    String publishedMessage = new String(message.getBody());
-    String channel = new String(message.getChannel());
-    System.out.println("[구독 패턴] " + channel + " → 데이터: " + publishedMessage);
-    eventPublisher.publishEvent(new RedisMessageEvent(channel, publishedMessage));
-}
+    @Override
+    public void onMessage(Message message, byte[] pattern) {
+        String publishedMessage = new String(message.getBody());
+        String channel = new String(message.getChannel());
+
+        System.out.println("[구독 패턴] " + channel + " → 데이터: " + publishedMessage);
+        eventPublisher.publishEvent(new RedisMessageEvent(channel, publishedMessage));
+    }
 }
