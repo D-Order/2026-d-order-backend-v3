@@ -1,7 +1,6 @@
 package com.example.spring.controller.serving;
 
 import com.example.spring.domain.serving.ServingTask;
-import com.example.spring.dto.serving.request.CatchCallRequest;
 import com.example.spring.dto.serving.response.ServingTaskResponse;
 import com.example.spring.security.ServerApiJwtFilter;
 import com.example.spring.service.serving.ServingTaskService;
@@ -67,8 +66,7 @@ public class ServingTaskController {
     @PostMapping("/catchcall")
     public ResponseEntity<String> catchCall(
             @RequestParam Long taskId,
-            @RequestBody CatchCallRequest request,
-            HttpServletRequest httpRequest
+            HttpServletRequest httpRequest // 🌟 @RequestBody CatchCallRequest 제거됨
     ) {
         Long boothId = (Long) httpRequest.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
 
@@ -76,7 +74,8 @@ public class ServingTaskController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("인증 정보가 없습니다.");
         }
 
-        servingTaskService.catchCall(taskId, boothId, request.getCatchedBy());
+        // 🌟 3번째 인자(catchedBy) 제거됨
+        servingTaskService.catchCall(taskId, boothId);
         return ResponseEntity.ok("서빙 요청이 수락되었습니다.");
     }
 
