@@ -46,15 +46,19 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         """JWT 쿠키 인증 → booth_id 반환, 실패 시 None"""
         user = self.scope.get("user")
 
+        logger.warning(f"🔐 [Order WS] 인증 시작 - user={user}, is_anonymous={isinstance(user, AnonymousUser)}")
+
         if not user or isinstance(user, AnonymousUser):
+            logger.warning(f"❌ [Order WS] 익명 사용자 - 연결 거부")
             await self.close(code=4001)
             return None
 
         try:
             booth = await sync_to_async(lambda: user.booth)()
+            logger.warning(f"✅ [Order WS] 인증 성공 - booth_id={booth.pk}, booth_name={booth.name}")
             return booth.pk
         except Exception as e:
-            logger.warning(f"[Order WS] User {user.username} has no booth: {e}")
+            logger.warning(f"❌ [Order WS] Booth 조회 실패 - user={user.username}, error={e}")
             await self.close(code=4003)
             return None
 
@@ -76,7 +80,9 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
     # ───────────────────────────────────────────
     async def send_order_snapshot(self):
         """현재 부스의 PAID 주문을 created_at 오름차순으로 직렬화하여 전송"""
+        logger.warning(f"📸 [Order WS] SNAP 시작 - booth_id={self.booth_id}")
         orders = await self._get_active_orders()
+        logger.warning(f"📸 [Order WS] 조회됨: {len(orders)}개 주문")
         serialized_orders = []
         for order in orders:
             serialized_orders.append(await self._serialize_order(order))
@@ -102,6 +108,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         """
         data = event.get("data", {})
         order_id = data.get("order_id")
+        logger.warning(f"🔥 [Order WS] 새 주문 수신 - order_id={order_id}")
 
         if order_id:
             order = await sync_to_async(
@@ -111,6 +118,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 .first()
             )()
             if order:
+                logger.warning(f"✅ [Order WS] 주문 조회 성공 - order_id={order_id}")
                 serialized = await self._serialize_order(order)
                 total_sales = await self._get_total_sales()
                 await self.send_json({
@@ -123,8 +131,11 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 })
                 await self.send_menu_aggregation()
                 return
+            else:
+                logger.warning(f"❌ [Order WS] 주문 조회 실패 - order_id={order_id}")
 
         # order_id 가 없거나 조회 실패 시 빈 배열
+        logger.warning(f"❌ [Order WS] 빈 배열 전송 - order_id={order_id}")
         total_sales = await self._get_total_sales()
         await self.send_json({
             "type": "ADMIN_NEW_ORDER",
@@ -207,15 +218,17 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
     # ───────────────────────────────────────────
     async def _get_active_orders(self):
         """해당 부스의 PAID 상태 주문을 오래된 순으로 조회"""
-        return await sync_to_async(list)(
-            Order.objects
-            .filter(
+        def _query():
+            logger.warning(f"🔍 [Order WS] DB 조회 - booth_id={self.booth_id}")
+            qs = Order.objects.filter(
                 order_status="PAID",
                 table_usage__table__booth_id=self.booth_id,
-            )
-            .select_related("table_usage__table")
-            .order_by("created_at")
-        )
+            ).select_related("table_usage__table").order_by("created_at")
+            count = qs.count()
+            logger.warning(f"🔍 [Order WS] DB 결과: {count}개 주문")
+            return list(qs)
+        
+        return await sync_to_async(_query)()
 
     async def _get_menu_aggregation(self):
         """
