@@ -146,9 +146,11 @@ class OrderService:
 
         # ─── 전체 SERVED 체크 → ORDER_COMPLETED ───
         # 리프 아이템만 대상: 세트메뉴 부모(parent=None, setmenu≠None) 제외
+        # FEE 카테고리 제외 (테이블 이용료는 상태 변경 대상 아님)
         all_served = not (
             order.items
             .exclude(parent__isnull=True, setmenu__isnull=False)
+            .exclude(menu__category="FEE")
             .exclude(status="SERVED")
             .exists()
         )
@@ -317,10 +319,12 @@ class OrderService:
         order.save(update_fields=["order_price", "updated_at"])
 
         # 9-1) 모든 아이템이 CANCELLED면 Order도 CANCELLED
+        # FEE 카테고리 제외 (테이블 이용료는 항상 존재함)
         all_cancelled = not (
             order.items
             .exclude(status="CANCELLED")
             .exclude(parent__isnull=True, setmenu__isnull=False)  # 세트메뉴 부모 쉘 제외
+            .exclude(menu__category="FEE")  # FEE 제외
             .exists()
         )
         if all_cancelled:
@@ -540,10 +544,12 @@ class OrderService:
 
         # SERVED일 때: 전체 아이템 SERVED 체크 → ORDER_COMPLETED
         # 리프 아이템만 대상: 세트메뉴 부모(parent=None, setmenu≠None) 제외
+        # FEE 카테고리 제외 (테이블 이용료는 상태 변경 대상 아님)
         if target_status == "SERVED":
             all_served = not (
                 order.items
                 .exclude(parent__isnull=True, setmenu__isnull=False)
+                .exclude(menu__category="FEE")
                 .exclude(status="SERVED")
                 .exists()
             )
