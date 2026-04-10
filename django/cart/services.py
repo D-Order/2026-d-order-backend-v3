@@ -682,7 +682,7 @@ def _finalize_payment_core(cart: Cart):
                 parent=None,
                 quantity=it.quantity,
                 fixed_price=int(it.price_at_cart),
-                status="cooking",
+                status="COOKING",
             )
 
             if menu.category != Menu.Category.FEE:
@@ -698,7 +698,7 @@ def _finalize_payment_core(cart: Cart):
                 parent=None,
                 quantity=it.quantity,
                 fixed_price=int(it.price_at_cart),
-                status="cooking",
+                status="COOKING",
             )
 
             comps = set_components.get(setmenu.id, [])
@@ -760,6 +760,17 @@ def confirm_payment_and_mark_ordered(*, table_usage_id: int) -> Cart:
         today_revenue = update_today_revenue(booth_id, order.order_price)
 
         group_name = f"booth_{booth_id}.order"
+        
+        # 1️⃣ ADMIN_NEW_ORDER 브로드캐스트
+        async_to_sync(get_channel_layer().group_send)(
+            group_name,
+            {
+                "type": "admin_new_order",
+                "data": {"order_id": order.pk},
+            }
+        )
+        
+        # 2️⃣ total_sales_update 브로드캐스트
         async_to_sync(get_channel_layer().group_send)(
             group_name,
             {
