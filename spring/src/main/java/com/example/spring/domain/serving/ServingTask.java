@@ -15,16 +15,9 @@ public class ServingTask {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * 운영자 인증 기반 조회를 위해 serving_task 자체에 booth_id를 저장
-     */
     @Column(name = "booth_id", nullable = false)
     private Long boothId;
 
-    /**
-     * Django가 관리하는 orderitem 테이블은
-     * Spring에서 JPA 연관관계로 직접 물지 않고 FK 값(ID)만 저장
-     */
     @Column(name = "orderitem", nullable = false)
     private Long orderItemId;
 
@@ -47,8 +40,7 @@ public class ServingTask {
     @Column(name = "served_at")
     private LocalDateTime servedAt;
 
-    @Column(name = "catched_by")
-    private String catchedBy;
+    // 🌟 catchedBy 필드 삭제됨
 
     @Column(name = "key", nullable = false, length = 255)
     private String key;
@@ -63,9 +55,9 @@ public class ServingTask {
         this.requestedAt = LocalDateTime.now();
     }
 
-    public void acceptServing(String catchedBy) {
+    // 🌟 파라미터 catchedBy 제거
+    public void acceptServing() {
         this.status = ServingStatus.SERVING;
-        this.catchedBy = catchedBy;
         this.catchedAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -78,7 +70,7 @@ public class ServingTask {
 
     public void cancelServing() {
         this.status = ServingStatus.SERVE_REQUESTED;
-        this.catchedBy = null;
+        // 🌟 catchedBy = null; 삭제됨
         this.catchedAt = null;
         this.updatedAt = LocalDateTime.now();
     }

@@ -13,7 +13,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime; // 🌟 LocalDateTime -> OffsetDateTime 으로 변경
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -36,7 +36,8 @@ public class ServingTaskService {
     }
 
     @Transactional
-    public void catchCall(Long taskId, Long boothId, String catchedBy) {
+    // 🌟 catchedBy 파라미터 삭제됨
+    public void catchCall(Long taskId, Long boothId) {
         String lockKey = "lock:serving_task:" + taskId;
         Boolean isAcquired = redisTemplate.opsForValue()
                 .setIfAbsent(lockKey, "locked", 5, TimeUnit.SECONDS);
@@ -57,10 +58,11 @@ public class ServingTaskService {
                 throw new IllegalStateException("이미 처리된 요청입니다.");
             }
 
-            String actor = (catchedBy != null && !catchedBy.isEmpty()) ? catchedBy : "STAFF";
-            task.acceptServing(actor);
+            // 🌟 actor(catchedBy) 전달 제거
+            task.acceptServing();
 
-            publishToDjango(boothId, "serving", task.getOrderItemId(), actor);
+            // 🌟 publishToDjango 호출 시 파라미터 수정 (null 제외)
+            publishToDjango(boothId, "serving", task.getOrderItemId());
             webSocketHandler.broadcastEvent("CATCH_CALL", ServingTaskResponse.from(task));
 
         } finally {
@@ -79,7 +81,7 @@ public class ServingTaskService {
 
         task.completeServing();
 
-        publishToDjango(boothId, "served", task.getOrderItemId(), null);
+        publishToDjango(boothId, "served", task.getOrderItemId());
         webSocketHandler.broadcastEvent("COMPLETE_CALL", ServingTaskResponse.from(task));
     }
 
@@ -94,7 +96,7 @@ public class ServingTaskService {
 
         task.cancelServing();
 
-        publishToDjango(boothId, "cooked", task.getOrderItemId(), null);
+        publishToDjango(boothId, "cooked", task.getOrderItemId());
         webSocketHandler.broadcastEvent("CANCEL_CALL", ServingTaskResponse.from(task));
     }
 
@@ -115,13 +117,14 @@ public class ServingTaskService {
         log.info("[새 서빙 요청 생성 및 브로드캐스트] boothId={}, orderItemId={}", boothId, orderItemId);
     }
 
-    private void publishToDjango(Long boothId, String status, Long orderItemId, String catchedBy) {
+    // 🌟 catchedBy 파라미터 삭제
+    private void publishToDjango(Long boothId, String status, Long orderItemId) {
         try {
             ServingStatusMessageDto messageDto = ServingStatusMessageDto.builder()
                     .orderItemId(orderItemId)
                     .status(status)
-                    .catchedBy(catchedBy)
-                    .pushedAt(LocalDateTime.now())
+                    // 🌟 OffsetDateTime 적용
+                    .pushedAt(OffsetDateTime.now())
                     .build();
 
             String jsonMessage = objectMapper.writeValueAsString(messageDto);

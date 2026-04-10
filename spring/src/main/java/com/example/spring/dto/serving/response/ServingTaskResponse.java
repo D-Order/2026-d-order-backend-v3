@@ -13,7 +13,7 @@ public class ServingTaskResponse {
     private Long taskId;
     private Long orderItemId;
     private String status;
-    private String catchedBy;
+    // 🌟 catchedBy 필드 삭제됨
     private LocalDateTime requestedAt;
 
     public static ServingTaskResponse from(ServingTask task) {
@@ -21,7 +21,7 @@ public class ServingTaskResponse {
                 .taskId(task.getId())
                 .orderItemId(task.getOrderItemId())
                 .status(task.getStatus() != null ? task.getStatus().name() : null)
-                .catchedBy(task.getCatchedBy())
+                // 🌟 catchedBy 매핑 삭제됨
                 .requestedAt(task.getRequestedAt())
                 .build();
     }

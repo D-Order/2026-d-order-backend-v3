@@ -1,15 +1,14 @@
 package com.example.spring.dto.redis;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime; // 🌟 수정됨
 
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED) // 역직렬화를 위해 기본 생성자 필요
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class OrderCookedMessageDto {
 
     @JsonProperty("order_item_id")
@@ -25,7 +24,7 @@ public class OrderCookedMessageDto {
 
     private String status; // "cooked"
 
+    // 🌟 수정됨: 강제 패턴을 지우고 OffsetDateTime을 사용해 Django 포맷을 그대로 흡수
     @JsonProperty("pushed_at")
-    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime pushedAt;
+    private OffsetDateTime pushedAt;
 }
