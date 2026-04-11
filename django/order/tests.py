@@ -292,3 +292,41 @@ async def test_admin_order_event_message(settings):
     assert response["data"]["orders"][0]["order_status"] == "PAID"
 
     await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_table_ended_order_should_not_appear(settings):
+    """테이블이 초기화되면 해당 주문은 WebSocket 스냅샷에서 안 보여야 함"""
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+    user = await sync_to_async(User.objects.create_user)(username="admin_test_table_end", password="password")
+    order, _, table_usage = await create_order_with_items(user)
+
+    # 1. 테이블이 사용 중일 때 스냅샷 확인
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
+    communicator.scope["user"] = user
+    connected, _ = await communicator.connect()
+    assert connected
+
+    snapshot_response = await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+    print(f"✅ 스냅샷 1 (테이블 사용 중): {len(snapshot_response['data']['orders'])}개 주문")
+    assert len(snapshot_response["data"]["orders"]) == 1
+    assert snapshot_response["data"]["orders"][0]["order_id"] == order.id
+
+    await communicator.disconnect()
+
+    # 2. 테이블을 초기화 (ended_at 설정)
+    await sync_to_async(lambda: TableUsage.objects.filter(pk=table_usage.id).update(ended_at=timezone.now()))()
+
+    # 3. 다시 연결하면 주문이 안 나타나야 함
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
+    communicator.scope["user"] = user
+    connected, _ = await communicator.connect()
+    assert connected
+
+    snapshot_response2 = await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+    print(f"✅ 스냅샷 2 (테이블 초기화 후): {len(snapshot_response2['data']['orders'])}개 주문")
+    assert len(snapshot_response2["data"]["orders"]) == 0  # 주문이 없어야 함
+
+    await communicator.disconnect()
