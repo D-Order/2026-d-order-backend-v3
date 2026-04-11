@@ -217,12 +217,13 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
     # Private: DB 조회 / 직렬화
     # ───────────────────────────────────────────
     async def _get_active_orders(self):
-        """해당 부스의 PAID 상태 주문을 오래된 순으로 조회"""
+        """해당 부스의 PAID 상태 주문을 오래된 순으로 조회 (종료된 테이블 제외)"""
         def _query():
             logger.warning(f"🔍 [Order WS] DB 조회 - booth_id={self.booth_id}")
             qs = Order.objects.filter(
                 order_status="PAID",
                 table_usage__table__booth_id=self.booth_id,
+                table_usage__ended_at__isnull=True,  # ← 테이블 사용 중인 것만 (종료된 테이블 제외)
             ).select_related("table_usage__table").order_by("created_at")
             count = qs.count()
             logger.warning(f"🔍 [Order WS] DB 결과: {count}개 주문")
