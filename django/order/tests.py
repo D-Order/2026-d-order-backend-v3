@@ -408,3 +408,87 @@ async def test_table_reset_websocket_broadcast(settings):
     assert reset_response["data"]["orders"][0]["order_id"] == order2.id
 
     await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_table_merge_websocket_broadcast(settings):
+    """테이블 병합 시 WebSocket으로 실시간 알림이 전송되고 주문이 갱신되는지 확인"""
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+    user = await sync_to_async(User.objects.create_user)(username="admin_table_merge", password="password")
+    booth = await sync_to_async(Booth.objects.create)(
+        user=user,
+        name="테스트부스",
+        account="1234567890",
+        depositor="홍길동",
+        bank="테스트은행",
+        table_max_cnt=10,
+        table_limit_hours=2,
+        seat_type="NO",
+    )
+    table1 = await sync_to_async(Table.objects.create)(booth=booth, table_num=1)
+    table2 = await sync_to_async(Table.objects.create)(booth=booth, table_num=2)
+    table3 = await sync_to_async(Table.objects.create)(booth=booth, table_num=3)
+    
+    # 테이블 1, 2: 사용 중
+    table_usage1 = await sync_to_async(TableUsage.objects.create)(table=table1, started_at=timezone.now())
+    await sync_to_async(lambda: Table.objects.filter(pk=table1.id).update(status="IN_USE"))()
+    
+    table_usage2 = await sync_to_async(TableUsage.objects.create)(table=table2, started_at=timezone.now())
+    await sync_to_async(lambda: Table.objects.filter(pk=table2.id).update(status="IN_USE"))()
+    
+    # 테이블 3: 사용 중
+    table_usage3 = await sync_to_async(TableUsage.objects.create)(table=table3, started_at=timezone.now())
+    await sync_to_async(lambda: Table.objects.filter(pk=table3.id).update(status="IN_USE"))()
+    
+    menu = await sync_to_async(Menu.objects.create)(
+        booth=booth,
+        name="테스트메뉴",
+        category="MENU",
+        price=5000,
+        stock=100,
+    )
+
+    # 각 테이블의 주문
+    order1 = await sync_to_async(Order.objects.create)(
+        order_price=10000,
+        order_status="PAID",
+        table_usage=table_usage1,
+    )
+    order2 = await sync_to_async(Order.objects.create)(
+        order_price=10000,
+        order_status="PAID",
+        table_usage=table_usage2,
+    )
+    order3 = await sync_to_async(Order.objects.create)(
+        order_price=10000,
+        order_status="PAID",
+        table_usage=table_usage3,
+    )
+    
+    # WebSocket 연결
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
+    communicator.scope["user"] = user
+    connected, _ = await communicator.connect()
+    assert connected
+
+    # 초기 스냅샷 수신 (3개 주문)
+    snapshot = await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+    print(f"✅ 처음: {len(snapshot['data']['orders'])}개 주문")
+    assert len(snapshot["data"]["orders"]) == 3
+
+    # 테이블 1, 2 병합
+    from table.services import TableService
+    await sync_to_async(TableService.merge_tables)(booth, [1, 2])
+
+    # WebSocket에서 ADMIN_TABLE_MERGE 메시지 수신
+    merge_response = await receive_until_type(communicator, "ADMIN_TABLE_MERGE")
+    print(f"✅ 테이블 병합 메시지 수신 - table_nums={merge_response['data']['table_nums']}, rep={merge_response['data']['representative_table']}")
+    print(f"✅ 테이블 1,2 병합 후: {len(merge_response['data']['orders'])}개 주문 (order3 포함 모두)")
+    
+    # 병합되어도 주문은 유지되어야 함 (order1, order2, order3 모두 남음)
+    assert merge_response["data"]["representative_table"] == 1
+    assert len(merge_response["data"]["orders"]) == 3  # 모든 주문 유지
+
+    await communicator.disconnect()
