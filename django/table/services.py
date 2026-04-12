@@ -564,4 +564,13 @@ class TableService:
                 'count': all_tables_count,
             }
         })
+        # 주문 관리 대시보드에도 알림 (WebSocket 실시간 반영용)
+        TableService._broadcast_to_order_group(booth.pk, {
+            'type': 'admin_table_merge',
+            'data': {
+                'table_nums': merged_table_nums,
+                'representative_table': representative_table.table_num,
+                'count': all_tables_count,
+            }
+        })
         return representative_table.table_num, all_tables_count

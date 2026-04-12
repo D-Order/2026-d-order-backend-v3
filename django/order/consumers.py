@@ -25,7 +25,8 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
       ⑤ ORDER_COMPLETED       – 전체 서빙 완료
       ⑥ MENU_AGGREGATION      – 메뉴별 실시간 집계
       ⑦ TOTAL_SALES_UPDATE    – 총매출 갱신
-      ⑧ ADMIN_TABLE_RESET     – 테이블 초기화 (주문 제거)
+      ⑧ ADMIN_TABLE_RESET     – 테이블 초기화 (주문 갱신)
+      ⑨ ADMIN_TABLE_MERGE     – 테이블 병합 (주문 갱신)
     """
 
     # ───────────────────────────────────────────
@@ -322,6 +323,39 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
             "timestamp": timezone.localtime().isoformat(),
             "data": {
                 "table_nums": table_nums,
+                "count": data.get("count", 0),
+                "total_sales": total_sales,
+                "orders": serialized_orders,  # ← 현재 활성 주문들
+            },
+        })
+
+    # ───────────────────────────────────────────
+    # ⑨ ADMIN_TABLE_MERGE (group_send handler)
+    # ───────────────────────────────────────────
+    async def admin_table_merge(self, event):
+        """테이블 병합 이벤트 수신 → 현재 주문 목록 재전송 (병합되지 않은 테이블들)"""
+        data = event.get("data", {})
+        table_nums = data.get("table_nums", [])
+        representative_table = data.get("representative_table")
+        logger.warning(f"🔗 [Order WS] 테이블 병합 - table_nums={table_nums}, rep={representative_table}")
+        
+        # 현재 활성 주문 목록 재조회 (ended_at이 NULL인 테이블만)
+        orders = await self._get_active_orders()
+        logger.warning(f"🔗 [Order WS] 재조회됨: {len(orders)}개 주문")
+        
+        serialized_orders = []
+        for order in orders:
+            serialized_orders.append(await self._serialize_order(order))
+
+        total_sales = await self._get_total_sales()
+
+        # 클라이언트로 업데이트된 주문 목록 전송
+        await self.send_json({
+            "type": "ADMIN_TABLE_MERGE",
+            "timestamp": timezone.localtime().isoformat(),
+            "data": {
+                "table_nums": table_nums,
+                "representative_table": representative_table,
                 "count": data.get("count", 0),
                 "total_sales": total_sales,
                 "orders": serialized_orders,  # ← 현재 활성 주문들
