@@ -330,3 +330,47 @@ async def test_table_ended_order_should_not_appear(settings):
     assert len(snapshot_response2["data"]["orders"]) == 0  # 주문이 없어야 함
 
     await communicator.disconnect()
+
+
+@pytest.mark.asyncio
+@pytest.mark.django_db(transaction=True)
+async def test_table_reset_websocket_broadcast(settings):
+    """테이블 초기화 시 WebSocket으로 실시간 알림이 전송되는지 확인"""
+    settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+    user = await sync_to_async(User.objects.create_user)(username="admin_table_reset", password="password")
+    booth = await sync_to_async(Booth.objects.create)(
+        user=user,
+        name="테스트부스",
+        account="1234567890",
+        depositor="홍길동",
+        bank="테스트은행",
+        table_max_cnt=10,
+        table_limit_hours=2,
+        seat_type="NO",
+    )
+    table = await sync_to_async(Table.objects.create)(booth=booth, table_num=1)
+    # 테이블 사용 시작 (TableUsage 생성 + status를 IN_USE로 변경)
+    table_usage = await sync_to_async(TableUsage.objects.create)(table=table, started_at=timezone.now())
+    await sync_to_async(lambda: Table.objects.filter(pk=table.id).update(status="IN_USE"))()
+    
+    # WebSocket 연결
+    communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
+    communicator.scope["user"] = user
+    connected, _ = await communicator.connect()
+    assert connected
+
+    # 초기 스냅샷 수신
+    await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+
+    # 테이블 초기화 처리
+    from table.services import TableService
+    await sync_to_async(TableService.reset_tables)(booth, [1])
+
+    # WebSocket에서 ADMIN_TABLE_RESET 메시지 수신
+    response = await receive_until_type(communicator, "ADMIN_TABLE_RESET")
+    print(f"✅ 테이블 리셋 메시지 수신 - table_nums={response['data']['table_nums']}")
+    assert response["data"]["table_nums"] == [1]
+    assert response["data"]["count"] == 1
+
+    await communicator.disconnect()

@@ -24,6 +24,8 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
       ④ ADMIN_ORDER_CANCELLED – 주문 취소
       ⑤ ORDER_COMPLETED       – 전체 서빙 완료
       ⑥ MENU_AGGREGATION      – 메뉴별 실시간 집계
+      ⑦ TOTAL_SALES_UPDATE    – 총매출 갱신
+      ⑧ ADMIN_TABLE_RESET     – 테이블 초기화 (주문 제거)
     """
 
     # ───────────────────────────────────────────
@@ -294,6 +296,24 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
     async def total_sales_update(self, event):
         """총매출 갱신 이벤트 수신 → 매출 consumer에 위임하지 않고 직접 무시"""
         pass
+
+    # ───────────────────────────────────────────
+    # ⑧ ADMIN_TABLE_RESET (group_send handler)
+    # ───────────────────────────────────────────
+    async def admin_table_reset(self, event):
+        """테이블 초기화 이벤트 수신 → 해당 테이블의 주문을 클라이언트에서 제거"""
+        data = event.get("data", {})
+        table_nums = data.get("table_nums", [])
+        logger.warning(f"🔄 [Order WS] 테이블 초기화 - table_nums={table_nums}")
+        
+        await self.send_json({
+            "type": "ADMIN_TABLE_RESET",
+            "timestamp": timezone.localtime().isoformat(),
+            "data": {
+                "table_nums": table_nums,
+                "count": data.get("count", 0),
+            },
+        })
 
     async def _serialize_order(self, order):
         """Order 객체 → API 스펙 JSON (세트메뉴는 자식 OrderItem 개별 조회)"""
