@@ -335,7 +335,7 @@ async def test_table_ended_order_should_not_appear(settings):
 @pytest.mark.asyncio
 @pytest.mark.django_db(transaction=True)
 async def test_table_reset_websocket_broadcast(settings):
-    """테이블 초기화 시 WebSocket으로 실시간 알림이 전송되는지 확인"""
+    """테이블 초기화 시 WebSocket으로 실시간 알림이 전송되고 주문이 갱신되는지 확인"""
     settings.CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
     user = await sync_to_async(User.objects.create_user)(username="admin_table_reset", password="password")
@@ -349,10 +349,38 @@ async def test_table_reset_websocket_broadcast(settings):
         table_limit_hours=2,
         seat_type="NO",
     )
-    table = await sync_to_async(Table.objects.create)(booth=booth, table_num=1)
-    # 테이블 사용 시작 (TableUsage 생성 + status를 IN_USE로 변경)
-    table_usage = await sync_to_async(TableUsage.objects.create)(table=table, started_at=timezone.now())
-    await sync_to_async(lambda: Table.objects.filter(pk=table.id).update(status="IN_USE"))()
+    table1 = await sync_to_async(Table.objects.create)(booth=booth, table_num=1)
+    table2 = await sync_to_async(Table.objects.create)(booth=booth, table_num=2)
+    
+    # 테이블 1: 사용 중 (주문 있음)
+    table_usage1 = await sync_to_async(TableUsage.objects.create)(table=table1, started_at=timezone.now())
+    await sync_to_async(lambda: Table.objects.filter(pk=table1.id).update(status="IN_USE"))()
+    
+    # 테이블 2: 사용 중 (주문 있음)
+    table_usage2 = await sync_to_async(TableUsage.objects.create)(table=table2, started_at=timezone.now())
+    await sync_to_async(lambda: Table.objects.filter(pk=table2.id).update(status="IN_USE"))()
+    
+    menu = await sync_to_async(Menu.objects.create)(
+        booth=booth,
+        name="테스트메뉴",
+        category="MENU",
+        price=5000,
+        stock=100,
+    )
+
+    # 테이블 1의 주문
+    order1 = await sync_to_async(Order.objects.create)(
+        order_price=10000,
+        order_status="PAID",
+        table_usage=table_usage1,
+    )
+    
+    # 테이블 2의 주문
+    order2 = await sync_to_async(Order.objects.create)(
+        order_price=10000,
+        order_status="PAID",
+        table_usage=table_usage2,
+    )
     
     # WebSocket 연결
     communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
@@ -360,17 +388,23 @@ async def test_table_reset_websocket_broadcast(settings):
     connected, _ = await communicator.connect()
     assert connected
 
-    # 초기 스냅샷 수신
-    await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+    # 초기 스냅샷 수신 (2개 주문)
+    snapshot = await receive_until_type(communicator, "ADMIN_ORDER_SNAPSHOT")
+    print(f"✅ 처음: {len(snapshot['data']['orders'])}개 주문")
+    assert len(snapshot["data"]["orders"]) == 2
 
-    # 테이블 초기화 처리
+    # 테이블 1 초기화
     from table.services import TableService
     await sync_to_async(TableService.reset_tables)(booth, [1])
 
     # WebSocket에서 ADMIN_TABLE_RESET 메시지 수신
-    response = await receive_until_type(communicator, "ADMIN_TABLE_RESET")
-    print(f"✅ 테이블 리셋 메시지 수신 - table_nums={response['data']['table_nums']}")
-    assert response["data"]["table_nums"] == [1]
-    assert response["data"]["count"] == 1
+    reset_response = await receive_until_type(communicator, "ADMIN_TABLE_RESET")
+    print(f"✅ 테이블 리셋 메시지 수신 - table_nums={reset_response['data']['table_nums']}")
+    print(f"✅ 테이블 1 초기화 후: {len(reset_response['data']['orders'])}개 주문 (order2만 남아야 함)")
+    
+    # 초기화된 테이블 1의 주문은 제거되어야 함
+    assert reset_response["data"]["table_nums"] == [1]
+    assert len(reset_response["data"]["orders"]) == 1  # 테이블 2의 주문만 남음
+    assert reset_response["data"]["orders"][0]["order_id"] == order2.id
 
     await communicator.disconnect()

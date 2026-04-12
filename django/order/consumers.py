@@ -301,17 +301,30 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
     # ⑧ ADMIN_TABLE_RESET (group_send handler)
     # ───────────────────────────────────────────
     async def admin_table_reset(self, event):
-        """테이블 초기화 이벤트 수신 → 해당 테이블의 주문을 클라이언트에서 제거"""
+        """테이블 초기화 이벤트 수신 → 초기화된 테이블을 제외한 현재 주문 목록 재전송"""
         data = event.get("data", {})
         table_nums = data.get("table_nums", [])
         logger.warning(f"🔄 [Order WS] 테이블 초기화 - table_nums={table_nums}")
         
+        # 현재 활성 주문 목록 재조회 (ended_at이 NULL인 테이블만)
+        orders = await self._get_active_orders()
+        logger.warning(f"🔄 [Order WS] 재조회됨: {len(orders)}개 주문")
+        
+        serialized_orders = []
+        for order in orders:
+            serialized_orders.append(await self._serialize_order(order))
+
+        total_sales = await self._get_total_sales()
+
+        # 클라이언트로 업데이트된 주문 목록 전송
         await self.send_json({
             "type": "ADMIN_TABLE_RESET",
             "timestamp": timezone.localtime().isoformat(),
             "data": {
                 "table_nums": table_nums,
                 "count": data.get("count", 0),
+                "total_sales": total_sales,
+                "orders": serialized_orders,  # ← 현재 활성 주문들
             },
         })
 
