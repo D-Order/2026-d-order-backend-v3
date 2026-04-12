@@ -162,6 +162,19 @@ class TableService:
         transaction.on_commit(send_ws)
 
     @staticmethod
+    def _broadcast_to_order_group(booth_pk, event):
+        """주문 관리 그룹에 이벤트를 전송 (테이블 초기화 알림 등)"""
+        def send_ws():
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                logger.error('[TableService] channel_layer 없어요')
+                return
+            async_to_sync(channel_layer.group_send)(f'booth_{booth_pk}.order', event)
+
+        # 이게 있어야 교착 상태에 안 빠져요
+        transaction.on_commit(send_ws)
+
+    @staticmethod
     def notify_spring_reset(booth_id, table_nums):
         """테이블 초기화 → Spring에 알림"""
         publish(f"booth:{booth_id}:tables:reset", {
@@ -332,6 +345,14 @@ class TableService:
 
         TableService._broadcast(booth.pk, {
             'type': 'reset_table',
+            'data': {
+                'table_nums': reset_table_nums,
+                'count': found_count,
+            }
+        })
+        # 주문 관리 대시보드에도 알림 (WebSocket 실시간 반영용)
+        TableService._broadcast_to_order_group(booth.pk, {
+            'type': 'admin_table_reset',
             'data': {
                 'table_nums': reset_table_nums,
                 'count': found_count,
