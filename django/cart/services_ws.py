@@ -9,7 +9,8 @@ from cart.services import (
     recalc_cart_price,
     _calc_discount,
     _is_fee_booth,         
-    _can_add_fee_in_this_round
+    _can_add_fee_in_this_round,
+    build_cart_item_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,26 +23,8 @@ def build_cart_snapshot_data(table_usage_id: int):
 
     items = []
     for it in cart.items.select_related("menu", "setmenu"):
-        if it.menu_id:
-            name = it.menu.name
-            unit_price = int(it.menu.price)
-            is_sold_out = it.menu.stock <= 0
-        else:
-            name = it.setmenu.name
-            unit_price = int(it.setmenu.price)
-            is_sold_out = False
-
-        items.append({
-            "id": it.id,
-            "type": it.type,
-            "menu_id": it.menu_id,
-            "set_menu_id": it.setmenu_id,
-            "name": name,
-            "unit_price": unit_price,
-            "quantity": it.quantity,
-            "line_price": it.line_price,
-            "is_sold_out": is_sold_out,
-        })
+        # 기존 직접 dict 만들던 부분 대신 공통 payload 사용
+        items.append(build_cart_item_payload(it))
 
     subtotal = cart.cart_price
 

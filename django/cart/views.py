@@ -17,7 +17,8 @@ from .services import (
     confirm_payment_and_mark_ordered,
     reset_ordered_cart,
     _is_fee_booth,
-    _can_add_fee_in_this_round 
+    _can_add_fee_in_this_round,
+    build_cart_item_payload,
 )
 from .services_ws import *
 
@@ -76,14 +77,7 @@ class CartAddAPIView(APIView):
                         "cart_price": cart.cart_price,
                         "round": cart.round,
                     },
-                    "item": {
-                        "id": item.id,
-                        "type": item.type,
-                        "menu_id": item.menu_id,
-                        "set_menu_id": item.setmenu_id,
-                        "quantity": item.quantity,
-                        "line_price": item.line_price,
-                    },
+                    "item": build_cart_item_payload(item),
                 },
             },
             status=200,
@@ -117,28 +111,7 @@ class CartDetailAPIView(APIView):
 
         items = []
         for it in cart.items.select_related("menu", "setmenu"):
-            if it.menu_id:
-                name = it.menu.name
-                unit_price = int(it.menu.price)
-                is_sold_out = it.menu.stock <= 0
-            else:
-                name = it.setmenu.name
-                unit_price = int(it.setmenu.price)
-                is_sold_out = False
-
-            items.append(
-                {
-                    "id": it.id,
-                    "type": it.type,
-                    "menu_id": it.menu_id,
-                    "set_menu_id": it.setmenu_id,
-                    "name": name,
-                    "unit_price": unit_price,
-                    "quantity": it.quantity,
-                    "line_price": it.line_price,
-                    "is_sold_out": is_sold_out,
-                }
-            )
+            items.append(build_cart_item_payload(it))   # 여기 수정
 
         coupon = {
             "applied": False,
@@ -224,8 +197,7 @@ class CartUpdateQuantityAPIView(APIView):
 
         data = {"cart_price": cart.cart_price}
         if item:
-            data["item"] = {"id": item.id, "quantity": item.quantity, "line_price": item.line_price}
-
+            data["item"] = build_cart_item_payload(item)
         return Response({"message": "수량 변경 성공", "data": data}, status=200)
 
 

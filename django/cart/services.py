@@ -127,6 +127,46 @@ def recalc_cart_price(cart: Cart) -> int:
     return cart.cart_price
 
 
+# 장바구니 item 이미지 URL 공통 헬퍼
+def get_cart_item_image_url(item: CartItem) -> str | None:
+    """
+    CartItem이 단일 메뉴인지 세트메뉴인지에 따라 이미지 URL 반환
+    """
+    if item.menu_id and item.menu and item.menu.image:
+        return item.menu.image.url
+
+    if item.setmenu_id and item.setmenu and item.setmenu.image:
+        return item.setmenu.image.url
+
+    return None
+
+
+#  장바구니 item payload 공통 헬퍼
+# REST / WS 둘 다 같은 구조로 맞추기 위해 사용
+def build_cart_item_payload(item: CartItem) -> dict:
+    if item.menu_id:
+        name = item.menu.name
+        unit_price = int(item.menu.price)
+        is_sold_out = item.menu.stock <= 0
+    else:
+        name = item.setmenu.name
+        unit_price = int(item.setmenu.price)
+        is_sold_out = False
+
+    return {
+        "id": item.id,
+        "type": item.type,
+        "menu_id": item.menu_id,
+        "set_menu_id": item.setmenu_id,
+        "name": name,
+        "image": get_cart_item_image_url(item),
+        "unit_price": unit_price,
+        "quantity": item.quantity,
+        "line_price": item.line_price,
+        "is_sold_out": is_sold_out,
+    }
+
+
 def _validate_menu_stock(menu: Menu, want_qty: int):
     if menu.stock < want_qty:
         raise CartError(
