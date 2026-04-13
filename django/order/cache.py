@@ -7,6 +7,7 @@ TTL    : 자정까지 (일 경계 자동 만료)
 공개 API:
   get_today_revenue(booth_id)           → 캐시 우선 조회, 미스 시 DB 초기화
   update_today_revenue(booth_id, delta) → INCRBY (캐시 미스 시 DB 초기화 후 적용)
+  invalidate_today_revenue(booth_id)    → 캐시 삭제 (다음 조회 시 DB 재계산)
 """
 
 import logging
@@ -109,3 +110,17 @@ def update_today_revenue(booth_id: int, delta: int) -> int:
 
     # 캐시 미스 또는 Redis 장애 → DB 초기화 (delta 포함 최신 값 반환)
     return get_today_revenue(booth_id)
+
+
+def invalidate_today_revenue(booth_id: int) -> None:
+    """
+    오늘 매출 캐시를 삭제한다.
+
+    데이터 포맷 등으로 주문이 일괄 삭제된 경우,
+    다음 조회 시 DB에서 재계산되도록 캐시를 무효화한다.
+    """
+    try:
+        from core.redis_client import get_redis_client
+        get_redis_client().delete(_cache_key(booth_id))
+    except Exception as e:
+        logger.warning(f"[Revenue Cache] 삭제 실패 booth={booth_id}: {e}")

@@ -126,6 +126,9 @@ class BoothService:
         from order.models import Order
         Order.objects.filter(table_usage__table__booth=booth).delete()
 
+        from order.cache import invalidate_today_revenue
+        invalidate_today_revenue(booth.pk)
+
         # 4. 모든 TableUsage 삭제
         #    Cart.table_usage가 CASCADE이므로 Cart도 함께 삭제됨
         deleted_count, _ = TableUsage.objects.filter(table__booth=booth).delete()
