@@ -42,8 +42,13 @@ def generate_menu_image_path(instance, filename):
     
     Example: booth_1/menu_images/menu_550e8400-e29b-41d4-a716-446655440000.jpg
     """
+    try:
+        booth_id = instance.booth.id
+    except (AttributeError, ValueError):
+        booth_id = "unknown"
+    
     unique_filename = f"menu_{uuid.uuid4()}.jpg"
-    return f"booth_{instance.booth.id}/menu_images/{unique_filename}"
+    return f"booth_{booth_id}/menu_images/{unique_filename}"
 
 
 def generate_setmenu_image_path(instance, filename):
@@ -53,8 +58,13 @@ def generate_setmenu_image_path(instance, filename):
     
     Example: booth_1/setmenu_images/setmenu_550e8400-e29b-41d4-a716-446655440000.jpg
     """
+    try:
+        booth_id = instance.booth.id
+    except (AttributeError, ValueError):
+        booth_id = "unknown"
+    
     unique_filename = f"setmenu_{uuid.uuid4()}.jpg"
-    return f"booth_{instance.booth.id}/setmenu_images/{unique_filename}"
+    return f"booth_{booth_id}/setmenu_images/{unique_filename}"
 
 
 def validate_image_size(image):
@@ -119,15 +129,15 @@ def compress_image(image):
     img.save(output, format='JPEG', quality=COMPRESS_QUALITY, optimize=True)
     output.seek(0)
     
-    # 새 파일명 생성 (.jpg로 변경)
-    original_name = image.name.rsplit('.', 1)[0] if '.' in image.name else image.name
-    new_name = f"{original_name}.jpg"
+    # 파일명은 단순하게: upload_to 함수에서 최종 경로를 생성함
+    # compress_image에서는 확장자만 .jpg로 정규화
+    simple_name = "image.jpg"
     
     # InMemoryUploadedFile로 반환
     return InMemoryUploadedFile(
         file=output,
         field_name='image',
-        name=new_name,
+        name=simple_name,
         content_type='image/jpeg',
         size=output.getbuffer().nbytes,
         charset=None
