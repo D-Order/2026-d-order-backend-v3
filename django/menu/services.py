@@ -58,7 +58,7 @@ class SetMenuService:
         세트메뉴 생성
         - SetMenu + SetMenuItem 함께 생성
         """
-        set_items_data = validated_data.pop('set_items')
+        set_items_data = validated_data.pop('set_items_input')
         
         # SetMenu 생성
         set_menu = SetMenu.objects.create(booth=booth, **validated_data)
@@ -77,7 +77,7 @@ class SetMenuService:
     @transaction.atomic
     def update_set_menu(set_menu, validated_data):
         """세트메뉴 수정 (이미지 삭제 포함)"""
-        set_items_data = validated_data.pop('set_items', None)
+        set_items_data = validated_data.pop('set_items_input', None)
         
         # 이미지 삭제 처리
         image_delete = validated_data.pop('image_delete', False)
