@@ -43,8 +43,8 @@ def generate_menu_image_path(instance, filename):
     Example: booth_1/menu_images/menu_550e8400-e29b-41d4-a716-446655440000.jpg
     """
     try:
-        booth_id = instance.booth.id
-    except (AttributeError, ValueError):
+        booth_id = instance.booth_id or instance.booth.pk
+    except (AttributeError, ValueError, TypeError):
         booth_id = "unknown"
     
     unique_filename = f"menu_{uuid.uuid4()}.jpg"
@@ -59,8 +59,8 @@ def generate_setmenu_image_path(instance, filename):
     Example: booth_1/setmenu_images/setmenu_550e8400-e29b-41d4-a716-446655440000.jpg
     """
     try:
-        booth_id = instance.booth.id
-    except (AttributeError, ValueError):
+        booth_id = instance.booth_id or instance.booth.pk
+    except (AttributeError, ValueError, TypeError):
         booth_id = "unknown"
     
     unique_filename = f"setmenu_{uuid.uuid4()}.jpg"
