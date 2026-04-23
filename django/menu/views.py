@@ -102,7 +102,7 @@ class SetMenuAPIView(APIView):
             for key in request.data:
                 if key == 'set_items':
                     try:
-                        data['set_items_input'] = json.loads(request.data.get('set_items'))
+                        data['set_items'] = json.loads(request.data.get('set_items'))
                     except json.JSONDecodeError:
                         return Response({
                             "message": "입력값 유효성 검사 실패",
@@ -161,7 +161,7 @@ class SetMenuDetailAPIView(APIView):
             for key in request.data:
                 if key == 'set_items':
                     try:
-                        data['set_items_input'] = json.loads(request.data.get('set_items'))
+                        data['set_items'] = json.loads(request.data.get('set_items'))
                     except json.JSONDecodeError:
                         return Response({
                             "message": "데이터 수정 형식이 올바르지 않습니다.",
