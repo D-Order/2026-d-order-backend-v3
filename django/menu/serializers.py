@@ -225,7 +225,7 @@ class SetMenuSerializer(serializers.ModelSerializer):
             'required': '가격은 필수 항목입니다.',
         }
     )
-    set_items = serializers.ListField(
+    set_items_input = serializers.ListField(
         child=serializers.DictField(),
         write_only=True,
         error_messages={
@@ -244,7 +244,7 @@ class SetMenuSerializer(serializers.ModelSerializer):
     # 출력 필드
     set_id = serializers.IntegerField(source='id', read_only=True)
     booth_id = serializers.IntegerField(source='booth.pk', read_only=True)
-    set_items_output = SetMenuItemOutputSerializer(source='items', many=True, read_only=True)
+    set_items = SetMenuItemOutputSerializer(source='items', many=True, read_only=True)
     origin_price = serializers.SerializerMethodField()
     is_soldout = serializers.SerializerMethodField()
     
@@ -252,7 +252,7 @@ class SetMenuSerializer(serializers.ModelSerializer):
         model = SetMenu
         fields = [
             'set_id', 'booth_id', 'name', 'category', 'description',
-            'price', 'image', 'set_items', 'set_items_output',
+            'price', 'image', 'set_items_input', 'set_items',
             'origin_price', 'is_soldout', 'created_at', 'updated_at'
         ]
         read_only_fields = ['set_id', 'booth_id', 'category', 'created_at', 'updated_at']
@@ -271,7 +271,7 @@ class SetMenuSerializer(serializers.ModelSerializer):
                 return True
         return False
     
-    def validate_set_items(self, value):
+    def validate_set_items_input(self, value):
         """세트 구성 항목 유효성 검사"""
         # 빈 배열 체크
         if not value or len(value) == 0:
@@ -290,13 +290,6 @@ class SetMenuSerializer(serializers.ModelSerializer):
             validated_items.append(item_serializer.validated_data)
         
         return validated_items
-    
-    def to_representation(self, instance):
-        """응답 포맷 조정 (set_items_output -> set_items)"""
-        data = super().to_representation(instance)
-        # set_items_output을 set_items로 매핑
-        data['set_items'] = data.pop('set_items_output', [])
-        return data
 
 
 class SetMenuUpdateSerializer(serializers.ModelSerializer):
@@ -330,7 +323,7 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
             'invalid': '가격은 정수여야 합니다.',
         }
     )
-    set_items = serializers.ListField(
+    set_items_input = serializers.ListField(
         child=serializers.DictField(),
         required=False,
         error_messages={
@@ -346,7 +339,7 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
     # 출력 필드
     set_id = serializers.IntegerField(source='id', read_only=True)
     booth_id = serializers.IntegerField(source='booth.pk', read_only=True)
-    set_items_output = SetMenuItemOutputSerializer(source='items', many=True, read_only=True)
+    set_items = SetMenuItemOutputSerializer(source='items', many=True, read_only=True)
     origin_price = serializers.SerializerMethodField()
     is_soldout = serializers.SerializerMethodField()
     
@@ -354,7 +347,7 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
         model = SetMenu
         fields = [
             'set_id', 'booth_id', 'name', 'category', 'description',
-            'price', 'image', 'image_delete', 'set_items', 'set_items_output',
+            'price', 'image', 'image_delete', 'set_items_input', 'set_items',
             'origin_price', 'is_soldout', 'created_at', 'updated_at'
         ]
         read_only_fields = ['set_id', 'booth_id', 'category', 'image', 'created_at', 'updated_at']
@@ -373,7 +366,7 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
                 return True
         return False
     
-    def validate_set_items(self, value):
+    def validate_set_items_input(self, value):
         """세트 구성 항목 유효성 검사"""
         # 빈 배열 체크 (수정 시에도 최소 1개 필요)
         if not value or len(value) == 0:
@@ -402,9 +395,3 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
                     'image': '이미지는 수정할 수 없습니다. image_delete로 삭제만 가능합니다.'
                 })
         return attrs
-    
-    def to_representation(self, instance):
-        """응답 포맷 조정 (set_items_output -> set_items)"""
-        data = super().to_representation(instance)
-        data['set_items'] = data.pop('set_items_output', [])
-        return data
