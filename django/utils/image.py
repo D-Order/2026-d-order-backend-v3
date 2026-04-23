@@ -1,4 +1,6 @@
 import io
+import uuid
+from datetime import datetime
 from PIL import Image, UnidentifiedImageError
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from rest_framework import serializers
@@ -27,6 +29,32 @@ class UnsupportedImageFormatException(APIException):
     status_code = 415
     default_detail = '지원하지 않는 파일 형식입니다.'
     default_code = 'UNSUPPORTED_IMAGE_FORMAT'
+
+
+# ==========================================
+# 이미지 파일명 및 경로 생성 함수
+# ==========================================
+
+def generate_menu_image_path(instance, filename):
+    """
+    메뉴 이미지 파일 경로 생성
+    경로: booth_{booth_id}/menu_images/menu_{uuid}.jpg
+    
+    Example: booth_1/menu_images/menu_550e8400-e29b-41d4-a716-446655440000.jpg
+    """
+    unique_filename = f"menu_{uuid.uuid4()}.jpg"
+    return f"booth_{instance.booth.id}/menu_images/{unique_filename}"
+
+
+def generate_setmenu_image_path(instance, filename):
+    """
+    세트메뉴 이미지 파일 경로 생성
+    경로: booth_{booth_id}/setmenu_images/setmenu_{uuid}.jpg
+    
+    Example: booth_1/setmenu_images/setmenu_550e8400-e29b-41d4-a716-446655440000.jpg
+    """
+    unique_filename = f"setmenu_{uuid.uuid4()}.jpg"
+    return f"booth_{instance.booth.id}/setmenu_images/{unique_filename}"
 
 
 def validate_image_size(image):
