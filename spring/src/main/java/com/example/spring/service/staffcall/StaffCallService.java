@@ -10,6 +10,7 @@ import com.example.spring.dto.redis.StaffCallRedisMessageDto;
 import com.example.spring.dto.staffcall.request.StaffCallAcceptRequest;
 import com.example.spring.dto.staffcall.request.StaffCallCancelRequest;
 import com.example.spring.dto.staffcall.request.StaffCallCompleteRequest;
+import com.example.spring.dto.staffcall.request.StaffCallDeleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
 import com.example.spring.dto.staffcall.response.StaffCallItemResponse;
@@ -177,6 +178,50 @@ public class StaffCallService {
         Map<String, Object> out = new HashMap<>();
         out.put("message", "호출을 완료 처리했습니다.");
         out.put("data", StaffCallItemResponse.from(sc));
+        return out;
+    }
+
+    /**
+     * 무인증 고객이 생성 직후 staff_call을 삭제(취소)하는 API.
+     * - subscribe_token으로만 권한 검증
+     * - PENDING 상태만 삭제 가능 (ACCEPTED 이후는 충돌)
+     */
+    @Transactional
+    public Map<String, Object> deleteByCustomer(StaffCallDeleteRequest req) {
+        if (req == null || req.getStaffCallId() == null) {
+            throw new IllegalArgumentException("staff_call_id는 필수입니다.");
+        }
+        Long staffCallId = req.getStaffCallId();
+        String token = req.getSubscribeToken();
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("subscribe_token은 필수입니다.");
+        }
+        if (!customerStaffCallWebSocketHandler.isValidSubscribeToken(staffCallId, token)) {
+            throw new StaffCallConflictException("유효하지 않은 subscribe_token 입니다.");
+        }
+
+        StaffCall sc = staffCallRepository.findById(staffCallId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 호출을 찾을 수 없습니다."));
+
+        if (sc.getStatus() != StaffCallStatus.PENDING) {
+            throw new StaffCallConflictException("대기 중인 호출만 취소할 수 있습니다.");
+        }
+
+        Long boothId = sc.getBoothId();
+        staffCallRepository.delete(sc);
+
+        publishRedis(sc, "staff_call_deleted");
+        try {
+            staffCallWebSocketHandler.broadcastSnapshot(boothId,
+                    staffCallQueryService.listForBooth(boothId, 50, 0));
+            customerStaffCallWebSocketHandler.broadcastDeleted(staffCallId);
+        } catch (Exception e) {
+            log.error("[staffcall deleteByCustomer] 스냅샷 조회/WS 푸시 실패 — 삭제는 반영됨 boothId={}", boothId, e);
+        }
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("message", "호출을 취소했습니다.");
+        out.put("data", Map.of("staff_call_id", staffCallId));
         return out;
     }
 
