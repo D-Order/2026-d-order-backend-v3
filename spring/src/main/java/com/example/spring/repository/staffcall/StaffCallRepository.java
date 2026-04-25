@@ -29,7 +29,16 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             FROM staff_call sc
             WHERE sc.booth_id = :boothId
             AND sc.status IN ('PENDING', 'ACCEPTED')
-            ORDER BY sc.created_at DESC
+            ORDER BY
+              CASE
+                WHEN sc.status = 'PENDING' THEN 1
+                ELSE 0
+              END ASC,
+              CASE
+                WHEN sc.status = 'ACCEPTED' THEN sc.accepted_at
+                ELSE sc.created_at
+              END DESC,
+              sc.id DESC
             LIMIT :limit OFFSET :offset
             """, nativeQuery = true)
     List<StaffCall> findActiveCallsForBooth(
