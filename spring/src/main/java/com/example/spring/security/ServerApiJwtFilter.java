@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 /**
  * {@code /server/**}, {@code /serving/**} 서버(직원/서빙) API — (기본) access_token 쿠키 필수
  * <p>
- * 단, 직원 호출 등록(emit)은 인증을 강제하지 않음
+ * 단, 직원 호출 등록(emit) 및 생성 직후 삭제는 인증을 강제하지 않음
  */
 @Component
 @RequiredArgsConstructor
@@ -45,7 +45,7 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 직원 호출 등록(emit)만 인증을 강제하지 않음
+        // 직원 호출 등록(emit) / 생성 직후 삭제만 인증을 강제하지 않음
         if (isStaffCallPublicPath(path)) {
             filterChain.doFilter(request, response);
             return;
@@ -80,6 +80,7 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
     }
 
     private boolean isStaffCallPublicPath(String path) {
-        return "/server/staffcall/request".equals(path);
+        return "/server/staffcall/request".equals(path)
+                || "/server/staffcall/delete".equals(path);
     }
 }

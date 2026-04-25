@@ -3,6 +3,7 @@ package com.example.spring.controller.staffcall;
 import com.example.spring.dto.staffcall.request.StaffCallAcceptRequest;
 import com.example.spring.dto.staffcall.request.StaffCallCancelRequest;
 import com.example.spring.dto.staffcall.request.StaffCallCompleteRequest;
+import com.example.spring.dto.staffcall.request.StaffCallDeleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.request.StaffCallListRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
@@ -34,6 +35,22 @@ public class StaffCallController {
             @RequestBody StaffCallEmitRequest body) {
         try {
             return ResponseEntity.ok(staffCallService.emit(body));
+        } catch (StaffCallConflictException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * 직원 호출 삭제(생성 직후 취소) — 무인증 고객용.
+     * subscribe_token 검증 후, PENDING 상태의 staff_call만 삭제한다.
+     */
+    @PostMapping("/staffcall/delete")
+    public ResponseEntity<Map<String, Object>> delete(
+            @RequestBody StaffCallDeleteRequest body) {
+        try {
+            return ResponseEntity.ok(staffCallService.deleteByCustomer(body));
         } catch (StaffCallConflictException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {

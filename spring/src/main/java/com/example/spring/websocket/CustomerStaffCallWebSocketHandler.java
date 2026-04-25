@@ -130,6 +130,33 @@ public class CustomerStaffCallWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    public void broadcastDeleted(Long staffCallId) {
+        Set<WebSocketSession> sessions = staffCallSessions.get(staffCallId);
+        if (sessions == null || sessions.isEmpty()) return;
+
+        try {
+            String json = objectMapper.writeValueAsString(Map.of(
+                    "type", "STAFF_CALL_STATUS",
+                    "staff_call_id", staffCallId,
+                    "status", "DELETED"
+            ));
+            TextMessage tm = new TextMessage(json);
+            for (WebSocketSession s : sessions) {
+                if (s.isOpen()) {
+                    try {
+                        s.sendMessage(tm);
+                    } catch (IOException e) {
+                        log.warn("[customer staffcall ws] 삭제 전송 실패 session={}", s.getId(), e);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("[customer staffcall ws] broadcastDeleted 실패 staffCallId={}", staffCallId, e);
+        } finally {
+            staffCallSessions.remove(staffCallId);
+        }
+    }
+
     private Map<String, Object> statusEvent(StaffCall sc) {
         Map<String, Object> out = new HashMap<>();
         out.put("type", "STAFF_CALL_STATUS");
@@ -153,6 +180,13 @@ public class CustomerStaffCallWebSocketHandler extends TextWebSocketHandler {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
         redisTemplate.opsForValue().set(REDIS_SUBSCRIBE_TOKEN_KEY_PREFIX + staffCallId, token, SUBSCRIBE_TOKEN_TTL);
         return token;
+    }
+
+    public boolean isValidSubscribeToken(Long staffCallId, String token) {
+        if (staffCallId == null || staffCallId <= 0) return false;
+        if (token == null || token.isBlank()) return false;
+        String expected = getSubscribeToken(staffCallId);
+        return expected != null && expected.equals(token);
     }
 
     private String getSubscribeToken(Long staffCallId) {
