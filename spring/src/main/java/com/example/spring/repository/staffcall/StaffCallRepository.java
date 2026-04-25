@@ -31,8 +31,8 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             AND sc.status IN ('PENDING', 'ACCEPTED')
             ORDER BY
               CASE
-                WHEN sc.status = 'PENDING' THEN 1
-                ELSE 0
+                WHEN sc.status = 'PENDING' THEN 0
+                ELSE 1
               END ASC,
               CASE
                 WHEN sc.status = 'ACCEPTED' THEN sc.accepted_at
