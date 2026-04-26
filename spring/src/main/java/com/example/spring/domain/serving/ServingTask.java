@@ -21,6 +21,9 @@ public class ServingTask {
     @Column(name = "orderitem", nullable = false)
     private Long orderItemId;
 
+    @Column(name = "table_number")
+    private Integer tableNumber;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
     private ServingStatus status;
@@ -46,9 +49,9 @@ public class ServingTask {
     private String key;
 
     @Builder
-    public ServingTask(Long boothId, Long orderItemId, String key) {
-        this.boothId = boothId;
+    public ServingTask(Long boothId, Long orderItemId, Integer tableNumber, String key) {        this.boothId = boothId;
         this.orderItemId = orderItemId;
+        this.tableNumber = tableNumber;
         this.status = ServingStatus.SERVE_REQUESTED;
         this.key = key;
         this.createdAt = LocalDateTime.now();

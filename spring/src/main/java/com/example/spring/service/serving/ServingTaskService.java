@@ -14,13 +14,20 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime; // 🌟 LocalDateTime -> OffsetDateTime 으로 변경
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ServingTaskService {
+
+    private static final List<ServingStatus> ACTIVE_SERVING_STATUSES = List.of(
+            ServingStatus.SERVE_REQUESTED,
+            ServingStatus.SERVING
+    );
 
     private final ServingTaskRepository servingTaskRepository;
     private final StringRedisTemplate redisTemplate;
@@ -104,10 +111,24 @@ public class ServingTaskService {
      * Django -> Spring : 조리 완료 알림 수신 시 새 serving_task 생성
      */
     @Transactional
-    public void createNewServingTask(Long boothId, Long orderItemId, String key) {
+    public void createNewServingTask(Long boothId, Long orderItemId, Integer tableNumber, String key) {
+        boolean alreadyExists = servingTaskRepository
+                .findFirstByBoothIdAndOrderItemIdAndStatusIn(
+                        boothId,
+                        orderItemId,
+                        ACTIVE_SERVING_STATUSES
+                )
+                .isPresent();
+
+        if (alreadyExists) {
+            log.info("[서빙 요청 중복 무시] boothId={}, orderItemId={}", boothId, orderItemId);
+            return;
+        }
+
         ServingTask newTask = ServingTask.builder()
                 .boothId(boothId)
                 .orderItemId(orderItemId)
+                .tableNumber(tableNumber)
                 .key(key)
                 .build();
 
@@ -115,6 +136,58 @@ public class ServingTaskService {
 
         webSocketHandler.broadcastEvent("NEW_CALL", ServingTaskResponse.from(newTask));
         log.info("[새 서빙 요청 생성 및 브로드캐스트] boothId={}, orderItemId={}", boothId, orderItemId);
+    }
+
+    @Transactional
+    public void removeTasksByOrderItemId(Long boothId, Long orderItemId, String reason) {
+        long deletedCount = servingTaskRepository.deleteByBoothIdAndOrderItemIdAndStatusIn(
+                boothId,
+                orderItemId,
+                ACTIVE_SERVING_STATUSES
+        );
+        if (deletedCount > 0) {
+            webSocketHandler.broadcastEvent(
+                    "REMOVE_CALL",
+                    buildRemoveCallPayload(boothId, reason, deletedCount, orderItemId, null)
+            );
+        }
+        log.info("[서빙 요청 삭제] boothId={}, orderItemId={}, reason={}, deletedCount={}", boothId, orderItemId, reason, deletedCount);
+    }
+
+    @Transactional
+    public void removeTasksByTableNumber(Long boothId, Integer tableNumber, String reason) {
+        long deletedCount = servingTaskRepository.deleteByBoothIdAndTableNumberAndStatusIn(
+                boothId,
+                tableNumber,
+                ACTIVE_SERVING_STATUSES
+        );
+        if (deletedCount > 0) {
+            webSocketHandler.broadcastEvent(
+                    "REMOVE_CALL",
+                    buildRemoveCallPayload(boothId, reason, deletedCount, null, tableNumber)
+            );
+        }
+        log.info("[테이블 기준 서빙 요청 삭제] boothId={}, tableNumber={}, reason={}, deletedCount={}", boothId, tableNumber, reason, deletedCount);
+    }
+
+    private Map<String, Object> buildRemoveCallPayload(
+            Long boothId,
+            String reason,
+            long deletedCount,
+            Long orderItemId,
+            Integer tableNumber
+    ) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("boothId", boothId);
+        payload.put("reason", reason);
+        payload.put("deletedCount", deletedCount);
+        if (orderItemId != null) {
+            payload.put("orderItemId", orderItemId);
+        }
+        if (tableNumber != null) {
+            payload.put("tableNumber", tableNumber);
+        }
+        return payload;
     }
 
     // 🌟 catchedBy 파라미터 삭제

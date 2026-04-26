@@ -5,6 +5,7 @@ import com.example.spring.domain.serving.ServingTask;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ServingTaskRepository extends JpaRepository<ServingTask, Long> {
 
@@ -13,4 +14,10 @@ public interface ServingTaskRepository extends JpaRepository<ServingTask, Long> 
      * 해당 부스의 서빙 대기 목록만 조회
      */
     List<ServingTask> findByBoothIdAndStatusOrderByRequestedAtAsc(Long boothId, ServingStatus status);
+
+    Optional<ServingTask> findFirstByBoothIdAndOrderItemIdAndStatusIn(Long boothId, Long orderItemId, List<ServingStatus> statuses);
+
+    long deleteByBoothIdAndOrderItemIdAndStatusIn(Long boothId, Long orderItemId, List<ServingStatus> statuses);
+
+    long deleteByBoothIdAndTableNumberAndStatusIn(Long boothId, Integer tableNumber, List<ServingStatus> statuses);
 }
