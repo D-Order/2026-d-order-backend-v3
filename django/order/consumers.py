@@ -346,6 +346,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 "orders": serialized_orders,  # ← 현재 활성 주문들
             },
         })
+        await self.send_menu_aggregation()
 
     # ───────────────────────────────────────────
     # ⑨ ADMIN_TABLE_MERGE (group_send handler)
@@ -379,6 +380,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 "orders": serialized_orders,  # ← 현재 활성 주문들
             },
         })
+        await self.send_menu_aggregation()
 
     async def _serialize_order(self, order):
         """Order 객체 → API 스펙 JSON (세트메뉴는 자식 OrderItem 개별 조회)"""
