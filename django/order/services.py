@@ -95,6 +95,30 @@ class OrderService:
 
         table_num = order.table_usage.table.table_num
 
+        # ─── COOKING → Redis 발행 (서빙 요청 취소) ───
+        # 조리중으로 다시 변경되었을 때 (COOKED → COOKING), Spring의 ServingTask 제거
+        if target_status == "COOKING" and old_status == "COOKED":
+            try:
+                from core.redis_client import publish
+                publish(
+                    f"booth:{booth_id}:order:cooking",
+                    {
+                        "event": "SERVING_CANCELLED",
+                        "order_item_id": order_item_id,
+                        "table_num": table_num,
+                        "menu_name": menu_name,
+                        "quantity": item.quantity,
+                        "reason": "조리 다시 시작",
+                        "timestamp": timezone.localtime(now).isoformat(),
+                    }
+                )
+                logger.info(
+                    f"[ServingTask 취소] order_item_id={order_item_id}, "
+                    f"테이블={table_num}, 메뉴={menu_name}"
+                )
+            except Exception as e:
+                logger.error(f"[OrderItem] Redis 발행 실패 (COOKING): {e}")
+
         # ─── COOKED → Redis 발행 (스프링부트 서빙 알림) ───
         if target_status == "COOKED":
             try:
