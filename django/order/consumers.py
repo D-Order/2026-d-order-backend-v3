@@ -248,7 +248,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         리프 아이템만 대상 (세트메뉴 부모 제외, 자식 OrderItem + 일반 메뉴).
         조리중(COOKING) 상태인 것만 대상. 조리완료되면 집계에서 제외됨.
         """
-        active_statuses = ["COOKING"]  # 조리중인 것만
+        active_statuses = ["COOKING", "cooking"]  # 대소문자 혼용 대응
 
         def _query():
             # 리프 아이템만 집계: 메뉴가 있는 아이템들 (세트메뉴 부모 제외, 자식 + 일반 메뉴)
