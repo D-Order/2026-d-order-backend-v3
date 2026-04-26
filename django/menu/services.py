@@ -60,20 +60,20 @@ class MenuService:
         ).distinct()
 
         # 각 세트메뉴 삭제 전 활성 주문 확인
+        # 부모 OrderItem은 status가 직접 업데이트되지 않으므로 자식(구성품) 기준으로 판단
         for set_menu in set_menus_to_delete:
-            set_menu_active_order = OrderItem.objects.filter(
-                setmenu=set_menu,
+            blocking_child = OrderItem.objects.filter(
+                parent__setmenu=set_menu,
                 status__in=blocking_statuses
             ).first()
-            
-            if set_menu_active_order:
+            if blocking_child:
                 raise ValidationError(
                     f"해당 메뉴를 포함하는 세트메뉴('{set_menu.name}')가 "
-                    f"활성 주문(주문 ID: {set_menu_active_order.order_id})에 있습니다. "
+                    f"활성 주문(주문 ID: {blocking_child.order_id})에 있습니다. "
                     f"삭제할 수 없습니다."
                 )
-        
-        # 3. PROTECT FK 해제: 완료된 OrderItem의 menu 참조를 NULL로
+
+        # 3. PROTECT FK 해제
         OrderItem.objects.filter(menu=menu).exclude(status__in=blocking_statuses).update(menu=None)
 
         # 4. 이미지 파일 및 세트메뉴 삭제
@@ -84,8 +84,8 @@ class MenuService:
                 pass
 
         for set_menu in set_menus_to_delete:
-            # 세트메뉴 OrderItem의 setmenu 참조도 NULL로
-            OrderItem.objects.filter(setmenu=set_menu).exclude(status__in=blocking_statuses).update(setmenu=None)
+            # 부모 OrderItem의 setmenu FK 해제 (부모는 status 무관하게 NULL — 자식 체크로 이미 검증)
+            OrderItem.objects.filter(setmenu=set_menu).update(setmenu=None)
             if set_menu.image:
                 try:
                     set_menu.image.delete(save=False)
@@ -161,19 +161,20 @@ class SetMenuService:
         - SetMenuItem은 CASCADE로 자동 삭제됨
         """
         # 1. 활성 주문(COOKING, COOKED, SERVING) 확인 — SERVED는 삭제 허용
+        # 부모 OrderItem은 status가 직접 업데이트되지 않으므로 자식(구성품) 기준으로 판단
         blocking_statuses = ['COOKING', 'cooking', 'COOKED', 'cooked', 'SERVING', 'serving']
-        active_order_item = OrderItem.objects.filter(
-            setmenu=set_menu,
+        blocking_child = OrderItem.objects.filter(
+            parent__setmenu=set_menu,
             status__in=blocking_statuses
         ).first()
-        
-        if active_order_item:
+
+        if blocking_child:
             raise ValidationError(
-                f"현재 활성 주문(주문 ID: {active_order_item.order_id})에 포함되어 있습니다. 삭제할 수 없습니다."
+                f"현재 활성 주문(주문 ID: {blocking_child.order_id})에 포함되어 있습니다. 삭제할 수 없습니다."
             )
-        
-        # 2. PROTECT FK 해제: 완료된 OrderItem의 setmenu 참조를 NULL로
-        OrderItem.objects.filter(setmenu=set_menu).exclude(status__in=blocking_statuses).update(setmenu=None)
+
+        # 2. PROTECT FK 해제: 부모 OrderItem의 setmenu 참조를 NULL로 (status 무관)
+        OrderItem.objects.filter(setmenu=set_menu).update(setmenu=None)
 
         # 3. 이미지 파일 삭제
         if set_menu.image:
