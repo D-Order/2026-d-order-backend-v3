@@ -13,6 +13,7 @@ class OrderService:
     Redis 이벤트 기반 주문 생성/취소 서비스
     - payment.confirmed → Order 생성
     - order.cancelled   → Cart 복구
+    - spring ServingTask 취소 → OrderItem ROLLBACK (SERVED → COOKED)
     """
 
     # ─────────────────────────────────────────────
@@ -111,6 +112,24 @@ class OrderService:
                 )
             except Exception as e:
                 logger.error(f"[OrderItem] Redis 발행 실패: {e}")
+
+        # ─── SERVED → Redis 발행 (스프링부트 ServingTask 완료) ───
+        if target_status == "SERVED":
+            try:
+                from core.redis_client import publish
+                publish(
+                    f"booth:{booth_id}:order:served",
+                    {
+                        "event": "ORDER_ITEM_SERVED",
+                        "order_item_id": order_item_id,
+                        "table_num": table_num,
+                        "menu_name": menu_name,
+                        "status": "served",
+                        "timestamp": timezone.localtime(now).isoformat(),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"[OrderItem] Redis 발행 실패 (SERVED): {e}")
 
         # ─── WebSocket: ADMIN_ORDER_UPDATE (구성품별 items 배열) ───
         try:
@@ -943,4 +962,134 @@ class OrderService:
             "total_original_price": total_original_price,
             "total_discount_price": total_discount_price,
             "order_list": order_list[-order_limit:] if order_limit else order_list,
+        }
+
+    # ─────────────────────────────────────────────
+    # 서빙 취소 처리 (Spring → Django)
+    # spring:booth:{booth_id}:order:cooked 채널 구독
+    # ─────────────────────────────────────────────
+    @staticmethod
+    @transaction.atomic
+    def handle_serving_cancelled(event_data: dict) -> dict:
+        """
+        Spring에서 발행한 서빙 취소 이벤트를 처리.
+        서빙 중(SERVED) → 조리 완료(COOKED) 롤백
+
+        event_data:
+          - order_item_id: int (필수)
+          - booth_id: int (필수)
+          - reason: str (optional - 취소 사유)
+          - pushed_at: str (optional)
+
+        Returns:
+            dict: {"result": "success" | "not_found" | "invalid_status" | ...}
+        """
+        order_item_id = event_data.get("order_item_id")
+        booth_id = event_data.get("booth_id")
+
+        if not order_item_id or not booth_id:
+            logger.warning(f"[ServingCancelled] 필수 필드 누락: {event_data}")
+            return {"result": "missing_fields"}
+
+        try:
+            item = (
+                OrderItem.objects
+                .select_related("order__table_usage__table", "menu", "setmenu", "parent__setmenu")
+                .select_for_update(of=("self",))
+                .get(pk=order_item_id)
+            )
+        except OrderItem.DoesNotExist:
+            logger.warning(f"[ServingCancelled] OrderItem 없음: id={order_item_id}")
+            return {"result": "not_found"}
+
+        order = item.order
+        table = order.table_usage.table
+
+        # 부스 권한 확인
+        if table.booth_id != booth_id:
+            logger.warning(f"[ServingCancelled] 부스 권한 없음: item_booth={table.booth_id}, target_booth={booth_id}")
+            return {"result": "forbidden"}
+
+        # 세트메뉴 부모 아이템은 직접 상태 변경 불가
+        if item.setmenu_id and item.parent_id is None:
+            logger.warning(f"[ServingCancelled] 세트메뉴 부모 아이템 롤백 시도: id={order_item_id}")
+            return {"result": "invalid_target"}
+
+        # SERVED 상태에서만 롤백 가능
+        if item.status != "SERVED":
+            logger.warning(f"[ServingCancelled] 이미 SERVED 상태 아님: id={order_item_id}, current_status={item.status}")
+            return {"result": "invalid_status"}
+
+        old_status = item.status
+        now = timezone.now()
+        reason = event_data.get("reason", "Robot error")
+
+        # 상태 변경: SERVED → COOKED (served_at 유지)
+        item.status = "COOKED"
+        item.save(update_fields=["status"])
+
+        table_num = table.table_num
+        menu_name = (
+            item.menu.name if item.menu_id
+            else (item.setmenu.name if item.setmenu_id else "알 수 없음")
+        )
+
+        logger.info(
+            f"[ServingCancelled] item_id={order_item_id} "
+            f"{old_status} → COOKED (reason: {reason}, booth: {booth_id})"
+        )
+
+        # WebSocket: ADMIN_ORDER_UPDATE
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+
+            group_name = f"booth_{booth_id}.order"
+            channel_layer = get_channel_layer()
+
+            if item.parent_id is not None:
+                # 세트메뉴 자식 아이템
+                set_menu_name = item.parent.setmenu.name if item.parent and item.parent.setmenu_id else None
+            else:
+                set_menu_name = None
+
+            items_payload = [{
+                "order_item_id": order_item_id,
+                "menu_name": menu_name,
+                "status": "COOKED",
+                "is_set": item.parent_id is not None,
+                "set_menu_name": set_menu_name,
+                "parent_order_item_id": item.parent_id,
+                "served_at": timezone.localtime(item.served_at).isoformat() if item.served_at else None,
+                "rollback_reason": reason,
+            }]
+
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    "type": "admin_order_update",
+                    "data": {
+                        "order_id": order.pk,
+                        "items": items_payload,
+                    },
+                }
+            )
+        except Exception as e:
+            logger.error(f"[ServingCancelled] WebSocket 전송 실패: {e}")
+
+        # 테이블 WebSocket 브로드캐스트
+        try:
+            from table.services import OrderBroadcastService
+            OrderBroadcastService.broadcast_order_update(
+                booth_id, table_num, order.table_usage_id
+            )
+        except Exception as e:
+            logger.error(f"[ServingCancelled] 테이블 WS 브로드캐스트 실패: {e}")
+
+        return {
+            "result": "success",
+            "order_item_id": order_item_id,
+            "old_status": old_status,
+            "new_status": "COOKED",
+            "reason": reason,
         }
