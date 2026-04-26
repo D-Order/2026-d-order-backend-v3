@@ -1015,16 +1015,16 @@ class OrderService:
             logger.warning(f"[ServingCancelled] 세트메뉴 부모 아이템 롤백 시도: id={order_item_id}")
             return {"result": "invalid_target"}
 
-        # SERVED 상태에서만 롤백 가능
-        if item.status != "SERVED":
-            logger.warning(f"[ServingCancelled] 이미 SERVED 상태 아님: id={order_item_id}, current_status={item.status}")
+        # SERVING 또는 SERVED 상태에서만 롤백 가능
+        if item.status not in ("SERVING", "SERVED"):
+            logger.warning(f"[ServingCancelled] 이미 SERVING/SERVED 상태 아님: id={order_item_id}, current_status={item.status}")
             return {"result": "invalid_status"}
 
         old_status = item.status
         now = timezone.now()
         reason = event_data.get("reason", "Robot error")
 
-        # 상태 변경: SERVED → COOKED (served_at 유지)
+        # 상태 변경 (SERVING → COOKED 또는 SERVED → COOKED)
         item.status = "COOKED"
         item.save(update_fields=["status"])
 
