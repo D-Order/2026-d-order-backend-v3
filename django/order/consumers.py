@@ -266,15 +266,18 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
             for item in qs:
                 # 세트메뉴 또는 일반 메뉴 이름 결정
                 if item.setmenu_id:
-                    name = item.setmenu.name
-                    # 세트메뉴는 카테고리 없음 → food_map에 추가
-                    target = food_map
+                    # 세트메뉴: 모든 자식이 COOKING 상태인 경우만 포함
+                    children = item.children.all()
+                    if children.exists() and all(child.status == "COOKING" for child in children):
+                        name = item.setmenu.name
+                        # 세트메뉴는 카테고리 없음 → food_map에 추가
+                        target = food_map
+                        target[name] = target.get(name, 0) + item.quantity
                 else:
                     name = item.menu.name
                     category = item.menu.category
                     target = drink_map if category == "DRINK" else food_map
-                
-                target[name] = target.get(name, 0) + item.quantity
+                    target[name] = target.get(name, 0) + item.quantity
 
             def sort_key(pair):
                 return (-pair[1], pair[0])
