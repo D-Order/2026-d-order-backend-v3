@@ -243,28 +243,37 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         active_statuses = ["COOKING"]  # 조리중인 것만
 
         def _query():
-            # 리프 아이템: menu가 있고, 세트메뉴 부모(parent=None, setmenu≠None)가 아닌 것
-            # FEE 카테고리는 제외 (테이블 이용료는 메뉴 집계에서 제외)
+            # 조리 중인 주문 아이템 조회
+            # - 일반 메뉴 (menu≠NULL, parent=NULL)
+            # - 세트메뉴 부모 (setmenu≠NULL, menu=NULL, parent=NULL)
+            # - 세트메뉴 구성품은 자동으로 포함됨
+            # - FEE 카테고리는 제외 (테이블 이용료 제외)
             qs = (
                 OrderItem.objects
                 .filter(
                     order__order_status="PAID",
                     order__table_usage__table__booth_id=self.booth_id,
                     status__in=active_statuses,
-                    menu__isnull=False,
+                    parent__isnull=True,  # 세트메뉴 자식 제외
                 )
-                .exclude(parent__isnull=True, setmenu__isnull=False)
                 .exclude(menu__category="FEE")
-                .select_related("menu")
+                .select_related("menu", "setmenu")
             )
 
             food_map = {}
             drink_map = {}
 
             for item in qs:
-                name = item.menu.name
-                category = item.menu.category
-                target = drink_map if category == "DRINK" else food_map
+                # 세트메뉴 또는 일반 메뉴 이름 결정
+                if item.setmenu_id:
+                    name = item.setmenu.name
+                    # 세트메뉴는 카테고리 없음 → food_map에 추가
+                    target = food_map
+                else:
+                    name = item.menu.name
+                    category = item.menu.category
+                    target = drink_map if category == "DRINK" else food_map
+                
                 target[name] = target.get(name, 0) + item.quantity
 
             def sort_key(pair):
@@ -389,11 +398,11 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                     # 세트메뉴 → 자식 OrderItem 개별 직렬화
                     set_menu_name = item.setmenu.name
                     for child in item.children.all():
-                        menu_name = child.menu.name if child.menu else "알 수 없음"
+                        child_menu_name = child.menu.name if child.menu else "알 수 없음"
                         image = child.menu.image.url if child.menu and child.menu.image else None
                         items.append({
                             "order_item_id": child.id,
-                            "menu_name": menu_name,
+                            "menu_name": set_menu_name,
                             "image": image,
                             "quantity": child.quantity,
                             "fixed_price": item.fixed_price,
