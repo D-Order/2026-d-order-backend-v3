@@ -73,23 +73,27 @@ class MenuService:
                     f"삭제할 수 없습니다."
                 )
         
-        # 3. 이미지 파일 및 세트메뉴 삭제
+        # 3. PROTECT FK 해제: 완료된 OrderItem의 menu 참조를 NULL로
+        OrderItem.objects.filter(menu=menu).exclude(status__in=blocking_statuses).update(menu=None)
+
+        # 4. 이미지 파일 및 세트메뉴 삭제
         if menu.image:
             try:
                 menu.image.delete(save=False)
             except Exception:
-                pass  # 이미지 삭제 실패는 무시
-        
-        # 세트메뉴 이미지도 삭제
+                pass
+
         for set_menu in set_menus_to_delete:
+            # 세트메뉴 OrderItem의 setmenu 참조도 NULL로
+            OrderItem.objects.filter(setmenu=set_menu).exclude(status__in=blocking_statuses).update(setmenu=None)
             if set_menu.image:
                 try:
                     set_menu.image.delete(save=False)
                 except Exception:
                     pass
             set_menu.delete()
-        
-        # 4. DB 레코드 삭제
+
+        # 5. DB 레코드 삭제
         menu.delete()
 
 
@@ -168,12 +172,15 @@ class SetMenuService:
                 f"현재 활성 주문(주문 ID: {active_order_item.order_id})에 포함되어 있습니다. 삭제할 수 없습니다."
             )
         
-        # 2. 이미지 파일 삭제
+        # 2. PROTECT FK 해제: 완료된 OrderItem의 setmenu 참조를 NULL로
+        OrderItem.objects.filter(setmenu=set_menu).exclude(status__in=blocking_statuses).update(setmenu=None)
+
+        # 3. 이미지 파일 삭제
         if set_menu.image:
             try:
                 set_menu.image.delete(save=False)
             except Exception:
-                pass  # 이미지 삭제 실패는 무시
-        
-        # 3. DB 레코드 삭제 (SetMenuItem은 CASCADE로 자동 삭제)
+                pass
+
+        # 4. DB 레코드 삭제 (SetMenuItem은 CASCADE로 자동 삭제)
         set_menu.delete()
