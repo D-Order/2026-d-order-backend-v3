@@ -258,6 +258,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 .filter(
                     order__order_status="PAID",
                     order__table_usage__table__booth_id=self.booth_id,
+                    order__table_usage__ended_at__isnull=True,  # 초기화된 테이블 제외
                     status__in=active_statuses,
                     menu__isnull=False,  # 세트메뉴 부모(menu=None) 자동 제외, 자식·일반 포함
                 )

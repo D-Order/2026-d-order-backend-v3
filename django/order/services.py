@@ -904,6 +904,64 @@ class OrderService:
 
 
     # ─────────────────────────────────────────────
+    # 테이블 초기화 시 서빙 태스크 취소
+    # ─────────────────────────────────────────────
+
+    @staticmethod
+    def cancel_serving_tasks_for_reset(table_usage_ids: list, booth_id: int) -> None:
+        """
+        테이블 초기화 시 COOKED/SERVING 상태인 OrderItem에 대해
+        Spring에 SERVING_CANCELLED Redis 이벤트를 발행한다.
+
+        table_usage_ids: 초기화된 TableUsage ID 목록
+        booth_id: 부스 ID
+        """
+        if not table_usage_ids:
+            return
+
+        cooked_items = (
+            OrderItem.objects
+            .filter(
+                order__table_usage_id__in=table_usage_ids,
+                status__in=["COOKED", "cooked", "SERVING", "serving"],
+            )
+            .select_related("menu", "setmenu", "parent__setmenu")
+        )
+
+        try:
+            from core.redis_client import publish
+        except Exception as e:
+            logger.error(f"[TableReset] Redis import 실패: {e}")
+            return
+
+        now_str = timezone.localtime().isoformat()
+        for item in cooked_items:
+            if item.parent_id is not None:
+                menu_name = item.menu.name if item.menu_id else "알 수 없음"
+            elif item.menu_id:
+                menu_name = item.menu.name
+            else:
+                menu_name = item.setmenu.name if item.setmenu_id else "알 수 없음"
+
+            try:
+                publish(
+                    f"booth:{booth_id}:order:reset",
+                    {
+                        "event": "SERVING_CANCELLED",
+                        "order_item_id": item.pk,
+                        "menu_name": menu_name,
+                        "quantity": item.quantity,
+                        "reason": "테이블 초기화",
+                        "timestamp": now_str,
+                    }
+                )
+                logger.info(
+                    f"[TableReset] SERVING_CANCELLED 발행: item_id={item.pk}, menu={menu_name}"
+                )
+            except Exception as e:
+                logger.error(f"[TableReset] Redis 발행 실패 item_id={item.pk}: {e}")
+
+    # ─────────────────────────────────────────────
     # 주문 내역 dict 조립
     # ─────────────────────────────────────────────
 
