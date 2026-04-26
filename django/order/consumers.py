@@ -216,6 +216,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         )
         await self.send_json({
             "type": "MENU_AGGREGATION",
+            "timestamp": timezone.localtime().isoformat(),
             "data": aggregation,
         })
 
@@ -258,12 +259,13 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                     order__order_status="PAID",
                     order__table_usage__table__booth_id=self.booth_id,
                     status__in=active_statuses,
-                    menu__isnull=False,
+                    menu__isnull=False,  # 세트메뉴 부모(menu=None) 자동 제외, 자식·일반 포함
                 )
-                .exclude(parent__isnull=True, setmenu__isnull=False)  # 세트메뉴 부모 제외
                 .exclude(menu__category="FEE")
                 .select_related("menu")
             )
+
+            qs_count = qs.count()
 
             food_map = {}
             drink_map = {}
@@ -286,6 +288,14 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 {"menu_name": k, "total_quantity": v}
                 for k, v in sorted(drink_map.items(), key=sort_key)
             ]
+
+            logger.warning(
+                "📊 [Order WS] MENU_AGGREGATION 조회 - booth_id=%s, qs=%s, food=%s, drink=%s",
+                self.booth_id,
+                qs_count,
+                food_summary,
+                beverage_summary,
+            )
 
             return {
                 "food_summary": food_summary,
