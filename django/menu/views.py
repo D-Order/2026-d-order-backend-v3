@@ -250,6 +250,17 @@ class BoothMenuListAPIView(APIView):
             item_stocks = [item.menu.stock // item.quantity for item in setmenu.items.all() if item.menu.stock is not None and item.quantity > 0]
             min_stock = min(item_stocks) if item_stocks else 0
             is_soldout = any(item.menu.stock == 0 for item in setmenu.items.all())
+            
+            # set_items 구성
+            set_items = []
+            for item in setmenu.items.all():
+                set_items.append({
+                    "menu_id": item.menu.pk,
+                    "quantity": item.quantity,
+                    "base_price": int(item.menu.price),
+                    "stock": item.menu.stock
+                })
+            
             data.append({
                 "id": setmenu.pk,
                 "name": setmenu.name,
@@ -260,7 +271,8 @@ class BoothMenuListAPIView(APIView):
                 "stock": min_stock,
                 "is_soldout": is_soldout,
                 "is_fixed": False,
-                "created_at": setmenu.created_at.isoformat() if hasattr(setmenu, 'created_at') else None
+                "created_at": setmenu.created_at.isoformat() if hasattr(setmenu, 'created_at') else None,
+                "set_items": set_items
             })
         return Response({
             "message": "운영자 메뉴 목록 조회 완료",
