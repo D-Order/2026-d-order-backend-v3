@@ -42,27 +42,28 @@ class MenuService:
         - 해당 메뉴를 포함하는 세트메뉴도 함께 삭제
         - 이미지 파일도 함께 삭제
         """
-        # 1. 활성 주문(COOKING, COOKED, SERVING) 확인
+        # 1. 활성 주문(COOKING, COOKED, SERVING) 확인 — SERVED는 삭제 허용
+        blocking_statuses = ['COOKING', 'cooking', 'COOKED', 'cooked', 'SERVING', 'serving']
         active_order_item = OrderItem.objects.filter(
             menu=menu,
-            status__in=['COOKING', 'COOKED', 'SERVING']
+            status__in=blocking_statuses
         ).first()
-        
+
         if active_order_item:
             raise ValidationError(
                 f"현재 활성 주문(주문 ID: {active_order_item.order_id})에 포함된 메뉴입니다. 삭제할 수 없습니다."
             )
-        
+
         # 2. 해당 메뉴를 포함하는 세트메뉴 찾기
         set_menus_to_delete = SetMenu.objects.filter(
             items__menu=menu
         ).distinct()
-        
+
         # 각 세트메뉴 삭제 전 활성 주문 확인
         for set_menu in set_menus_to_delete:
             set_menu_active_order = OrderItem.objects.filter(
                 setmenu=set_menu,
-                status__in=['COOKING', 'COOKED', 'SERVING']
+                status__in=blocking_statuses
             ).first()
             
             if set_menu_active_order:
@@ -155,10 +156,11 @@ class SetMenuService:
         - 이미지 파일도 함께 삭제
         - SetMenuItem은 CASCADE로 자동 삭제됨
         """
-        # 1. 활성 주문(COOKING, COOKED, SERVING) 확인
+        # 1. 활성 주문(COOKING, COOKED, SERVING) 확인 — SERVED는 삭제 허용
+        blocking_statuses = ['COOKING', 'cooking', 'COOKED', 'cooked', 'SERVING', 'serving']
         active_order_item = OrderItem.objects.filter(
             setmenu=set_menu,
-            status__in=['COOKING', 'COOKED', 'SERVING']
+            status__in=blocking_statuses
         ).first()
         
         if active_order_item:
