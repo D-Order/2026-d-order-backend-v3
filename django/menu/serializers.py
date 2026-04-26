@@ -244,6 +244,7 @@ class SetMenuSerializer(serializers.ModelSerializer):
     # 출력 필드
     set_id = serializers.IntegerField(source='id', read_only=True)
     booth_id = serializers.IntegerField(source='booth.pk', read_only=True)
+    set_items_output = SetMenuItemOutputSerializer(source='items', many=True, read_only=True)
     origin_price = serializers.SerializerMethodField()
     is_soldout = serializers.SerializerMethodField()
     
@@ -251,7 +252,7 @@ class SetMenuSerializer(serializers.ModelSerializer):
         model = SetMenu
         fields = [
             'set_id', 'booth_id', 'name', 'category', 'description',
-            'price', 'image', 'set_items',
+            'price', 'image', 'set_items', 'set_items_output',
             'origin_price', 'is_soldout', 'created_at', 'updated_at'
         ]
         read_only_fields = ['set_id', 'booth_id', 'category', 'created_at', 'updated_at']
@@ -291,11 +292,10 @@ class SetMenuSerializer(serializers.ModelSerializer):
         return validated_items
     
     def to_representation(self, instance):
-        """출력 시 set_items을 SetMenuItemOutputSerializer로 처리"""
+        """출력 시 set_items_output을 set_items로 변환"""
         ret = super().to_representation(instance)
-        # set_items 필드가 없으면 items을 SetMenuItemOutputSerializer로 처리
-        if 'set_items' not in ret:
-            ret['set_items'] = SetMenuItemOutputSerializer(instance.items.all(), many=True).data
+        if 'set_items_output' in ret:
+            ret['set_items'] = ret.pop('set_items_output')
         return ret
 
 
@@ -346,6 +346,7 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
     # 출력 필드
     set_id = serializers.IntegerField(source='id', read_only=True)
     booth_id = serializers.IntegerField(source='booth.pk', read_only=True)
+    set_items_output = SetMenuItemOutputSerializer(source='items', many=True, read_only=True)
     origin_price = serializers.SerializerMethodField()
     is_soldout = serializers.SerializerMethodField()
     
@@ -353,7 +354,7 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
         model = SetMenu
         fields = [
             'set_id', 'booth_id', 'name', 'category', 'description',
-            'price', 'image', 'image_delete', 'set_items',
+            'price', 'image', 'image_delete', 'set_items', 'set_items_output',
             'origin_price', 'is_soldout', 'created_at', 'updated_at'
         ]
         read_only_fields = ['set_id', 'booth_id', 'category', 'image', 'created_at', 'updated_at']
@@ -403,9 +404,8 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
         return attrs
     
     def to_representation(self, instance):
-        """출력 시 set_items을 SetMenuItemOutputSerializer로 처리"""
+        """출력 시 set_items_output을 set_items로 변환"""
         ret = super().to_representation(instance)
-        # set_items 필드가 없으면 items을 SetMenuItemOutputSerializer로 처리
-        if 'set_items' not in ret:
-            ret['set_items'] = SetMenuItemOutputSerializer(instance.items.all(), many=True).data
+        if 'set_items_output' in ret:
+            ret['set_items'] = ret.pop('set_items_output')
         return ret
