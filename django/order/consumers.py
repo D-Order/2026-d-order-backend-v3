@@ -527,7 +527,8 @@ class BoothSalesConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
         pass
 
     async def admin_menu_aggregation(self, event):
-        pass
+        """메뉴 집계 갱신 핸들러"""
+        await self.send_menu_aggregation()
 
     async def _get_today_revenue(self):
         """오늘 매출 (캐시 우선, 미스 시 DB 초기화)"""
