@@ -184,6 +184,15 @@ class OrderService:
                     },
                 }
             )
+            
+            # 메뉴 집계 갱신
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    "type": "admin_menu_aggregation",
+                    "data": {}
+                }
+            )
         except Exception as e:
             logger.error(f"[OrderItem] WebSocket ADMIN_ORDER_UPDATE 전송 실패: {e}")
 
@@ -582,6 +591,15 @@ class OrderService:
                     },
                 }
             )
+            
+            # 메뉴 집계 갱신
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    "type": "admin_menu_aggregation",
+                    "data": {}
+                }
+            )
         except Exception as e:
             logger.error(f"[Serving] WebSocket ADMIN_ORDER_UPDATE 전송 실패: {e}")
 
@@ -772,6 +790,11 @@ class OrderService:
             async_to_sync(get_channel_layer().group_send)(
                 group_name,
                 {"type": "total_sales_update", "data": {"today_revenue": today_revenue}}
+            )
+            # 메뉴 집계 갱신
+            async_to_sync(get_channel_layer().group_send)(
+                group_name,
+                {"type": "admin_menu_aggregation", "data": {}}
             )
         except Exception as ws_err:
             logger.error(f"[Order] WebSocket 전송 실패 (주문은 정상 생성됨): {ws_err}")
@@ -1096,6 +1119,15 @@ class OrderService:
                         "order_id": order.pk,
                         "items": items_payload,
                     },
+                }
+            )
+            
+            # 메뉴 집계 갱신
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    "type": "admin_menu_aggregation",
+                    "data": {}
                 }
             )
         except Exception as e:
