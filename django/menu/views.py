@@ -81,8 +81,16 @@ class MenuDetailAPIView(APIView):
         menu, error_response = self.get_menu(menu_id, booth, action='delete')
         if error_response:
             return error_response
-        deleted_menu_id = menu.id
-        MenuService.delete_menu(menu)
+        
+        try:
+            deleted_menu_id = menu.id
+            MenuService.delete_menu(menu)
+        except ValidationError as e:
+            return Response({
+                "message": str(e.detail[0]) if e.detail else "메뉴 삭제에 실패했습니다.",
+                "code": "DELETION_FAILED"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         return Response({
             "message": "메뉴 삭제 성공",
             "data": {"menu_id": deleted_menu_id}
@@ -190,8 +198,16 @@ class SetMenuDetailAPIView(APIView):
         set_menu, error_response = self.get_set_menu(set_id, booth, action='delete')
         if error_response:
             return error_response
-        deleted_set_id = set_menu.id
-        SetMenuService.delete_set_menu(set_menu)
+        
+        try:
+            deleted_set_id = set_menu.id
+            SetMenuService.delete_set_menu(set_menu)
+        except ValidationError as e:
+            return Response({
+                "message": str(e.detail[0]) if e.detail else "세트메뉴 삭제에 실패했습니다.",
+                "code": "DELETION_FAILED"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         return Response({
             "message": "메뉴 삭제 성공",
             "data": {"set_id": deleted_set_id}

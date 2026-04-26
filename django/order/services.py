@@ -112,6 +112,24 @@ class OrderService:
             except Exception as e:
                 logger.error(f"[OrderItem] Redis 발행 실패: {e}")
 
+        # ─── SERVED → Redis 발행 (스프링부트 ServingTask 완료) ───
+        if target_status == "SERVED":
+            try:
+                from core.redis_client import publish
+                publish(
+                    f"booth:{booth_id}:order:served",
+                    {
+                        "event": "ORDER_ITEM_SERVED",
+                        "order_item_id": order_item_id,
+                        "table_num": table_num,
+                        "menu_name": menu_name,
+                        "status": "served",
+                        "timestamp": timezone.localtime(now).isoformat(),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"[OrderItem] Redis 발행 실패 (SERVED): {e}")
+
         # ─── WebSocket: ADMIN_ORDER_UPDATE (구성품별 items 배열) ───
         try:
             from channels.layers import get_channel_layer
