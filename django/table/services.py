@@ -359,6 +359,13 @@ class TableService:
             }
         })
         TableService.notify_spring_reset(booth.pk, reset_table_nums)
+
+        # 서빙 태스크 취소: COOKED/SERVING 아이템 → Spring SERVING_CANCELLED 발행
+        reset_usage_ids = [u.pk for u in active_usages_cache]
+        if reset_usage_ids:
+            from order.services import OrderService
+            OrderService.cancel_serving_tasks_for_reset(reset_usage_ids, booth.pk)
+
         return found_count
 
 
