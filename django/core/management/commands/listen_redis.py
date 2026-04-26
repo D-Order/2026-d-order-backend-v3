@@ -142,6 +142,22 @@ class Command(BaseCommand):
                 import traceback
                 self.stderr.write(traceback.format_exc())
 
+        # 서빙 취소 (롤백): spring:booth:{id}:order:cooked
+        # ServingTask 실패 시 SERVED → COOKED 상태 롤백
+        elif action == "cooked":
+            try:
+                # booth_id를 event_data에 추가하여 전달
+                event_with_booth = {**data, "booth_id": int(booth_id)}
+                result = OrderService.handle_serving_cancelled(event_with_booth)
+                action_desc = "서빙 취소" if result.get("result") == "success" else "서빙 취소 실패"
+                self.stdout.write(self.style.SUCCESS(
+                    f"[{action_desc}] booth:{booth_id} → {result}"
+                ))
+            except Exception as e:
+                self.stderr.write(self.style.ERROR(f"[서빙 취소 실패] booth:{booth_id} → {e}"))
+                import traceback
+                self.stderr.write(traceback.format_exc())
+
         # 기타 order 이벤트 → WebSocket 브로드캐스트
         else:
             event_type_map = {
