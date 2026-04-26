@@ -148,6 +148,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 "orders": [],
             },
         })
+        await self.send_menu_aggregation()
 
     # ───────────────────────────────────────────
     # ③ ADMIN_ORDER_UPDATE (group_send handler)
@@ -207,6 +208,12 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         음식(MENU) / 음료(DRINK)로 분류, 수량 내림차순 → 이름 오름차순.
         """
         aggregation = await self._get_menu_aggregation()
+        logger.warning(
+            "📊 [Order WS] MENU_AGGREGATION 전송 - booth_id=%s, food=%s, drink=%s",
+            self.booth_id,
+            len(aggregation.get("food_summary", [])),
+            len(aggregation.get("beverage_summary", [])),
+        )
         await self.send_json({
             "type": "MENU_AGGREGATION",
             "data": aggregation,
@@ -527,8 +534,8 @@ class BoothSalesConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
         pass
 
     async def admin_menu_aggregation(self, event):
-        """메뉴 집계 갱신 핸들러"""
-        await self.send_menu_aggregation()
+        # BoothSalesConsumer는 메뉴 집계를 다루지 않음
+        pass
 
     async def _get_today_revenue(self):
         """오늘 매출 (캐시 우선, 미스 시 DB 초기화)"""

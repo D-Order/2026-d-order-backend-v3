@@ -760,44 +760,52 @@ class OrderService:
         )
 
         # ⑨ WebSocket 브로드캐스트
+        booth_id = table_usage.table.booth_id
         try:
             from channels.layers import get_channel_layer
             from asgiref.sync import async_to_sync
             from order.cache import update_today_revenue
 
-            booth_id = table_usage.table.booth_id
             # order.order_price를 int로 변환 (Decimal → int)
             order_price_int = int(order.order_price)
             today_revenue = update_today_revenue(booth_id, order_price_int)
-
             group_name = f"booth_{booth_id}.order"
-            async_to_sync(get_channel_layer().group_send)(
-                group_name,
-                {
-                    "type": "admin_new_order",
-                    "data": {
-                        "order_id": order.pk,
-                        "cart_id": cart_id,
-                        "table_usage_id": table_usage_id,
-                        "order_price": order_price_int,
-                        "original_price": int(order.original_price) if order.original_price else 0,
-                        "total_discount": int(order.total_discount) if order.total_discount else 0,
-                        "order_status": order.order_status,
-                    }
-                }
-            )
-            # 오늘 매출 갱신 이벤트 (계산된 값 포함 → Consumer DB 쿼리 불필요)
-            async_to_sync(get_channel_layer().group_send)(
-                group_name,
-                {"type": "total_sales_update", "data": {"today_revenue": today_revenue}}
-            )
-            # 메뉴 집계 갱신
-            async_to_sync(get_channel_layer().group_send)(
-                group_name,
-                {"type": "admin_menu_aggregation", "data": {}}
-            )
+            channel_layer = get_channel_layer()
+
+            # 트랜잭션 커밋 이후 전송해야 consumer 조회 시 최신 데이터가 보장됨
+            def _send_ws_events_after_commit():
+                try:
+                    async_to_sync(channel_layer.group_send)(
+                        group_name,
+                        {
+                            "type": "admin_new_order",
+                            "data": {
+                                "order_id": order.pk,
+                                "cart_id": cart_id,
+                                "table_usage_id": table_usage_id,
+                                "order_price": order_price_int,
+                                "original_price": int(order.original_price) if order.original_price else 0,
+                                "total_discount": int(order.total_discount) if order.total_discount else 0,
+                                "order_status": order.order_status,
+                            }
+                        }
+                    )
+                    # 오늘 매출 갱신 이벤트 (계산된 값 포함 → Consumer DB 쿼리 불필요)
+                    async_to_sync(channel_layer.group_send)(
+                        group_name,
+                        {"type": "total_sales_update", "data": {"today_revenue": today_revenue}}
+                    )
+                    # 메뉴 집계 갱신
+                    async_to_sync(channel_layer.group_send)(
+                        group_name,
+                        {"type": "admin_menu_aggregation", "data": {}}
+                    )
+                except Exception as ws_err:
+                    logger.error(f"[Order] WebSocket 전송 실패 (주문은 정상 생성됨): {ws_err}")
+
+            transaction.on_commit(_send_ws_events_after_commit)
         except Exception as ws_err:
-            logger.error(f"[Order] WebSocket 전송 실패 (주문은 정상 생성됨): {ws_err}")
+            logger.error(f"[Order] WebSocket 준비 실패 (주문은 정상 생성됨): {ws_err}")
 
         # ⑩ 테이블 WebSocket 브로드캐스트
         try:
