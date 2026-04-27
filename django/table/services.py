@@ -176,11 +176,11 @@ class TableService:
 
     @staticmethod
     def notify_spring_reset(booth_id, table_nums):
-        """테이블 초기화 → Spring에 알림"""
-        publish(f"booth:{booth_id}:tables:reset", {
-            "table_nums": table_nums,
-            "count": len(table_nums)
-        })
+        """테이블 초기화 → Spring에 알림 (테이블당 1건씩 발행)"""
+        for table_num in table_nums:
+            publish(f"booth:{booth_id}:order:reset", {
+                "table_num": table_num,
+            })
 
     # @staticmethod
     # def notify_spring_merge(booth_id, representative_table, table_nums):
