@@ -54,6 +54,10 @@ class Command(BaseCommand):
                 elif domain == "staffcall":
                     self._handle_staffcall_event(booth_id, action, data, channel_layer)
 
+                # ──── Tables 도메인 처리 ────
+                elif domain == "tables":
+                    self._handle_tables_event(booth_id, action, data, channel_layer)
+
                 # ──── 기타 도메인 → WebSocket 브로드캐스트 ────
                 else:
                     group_name = f"booth_{booth_id}.{domain}"
@@ -100,6 +104,24 @@ class Command(BaseCommand):
         async_to_sync(channel_layer.group_send)(
             group_name,
             {"type": action, "data": data}
+        )
+
+    def _handle_tables_event(self, booth_id, action, data, channel_layer):
+        """Tables 도메인 이벤트 분기 처리"""
+        # ws_handlers.py 핸들러 이름과 매핑
+        action_map = {
+            "reset": "reset_table",
+            "merge": "merge_table",
+        }
+        event_type = action_map.get(action, f"table_{action}")
+        group_name = f"booth_{booth_id}.tables"
+
+        self.stdout.write(self.style.SUCCESS(
+            f"[Tables] booth:{booth_id} action:{action} → event_type:{event_type}"
+        ))
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {"type": event_type, "data": data}
         )
 
     def _handle_order_event(self, booth_id, action, data, channel_layer):
