@@ -122,3 +122,26 @@ def broadcast_cart_event(table_usage_id: int, event_type: str, message: str):
             "data": payload,
         },
     )
+
+
+def broadcast_cart_reset_on_table_end(table_usage_id: int):
+    """테이블 초기화로 TableUsage가 종료될 때 발행하는 경량 CART_RESET.
+
+    build_cart_snapshot_data를 거치지 않으므로 ended_at이 이미 채워진 시점에도
+    안전하게 호출할 수 있다.
+    """
+    channel_layer = get_channel_layer()
+    group_name = f"table_usage_{table_usage_id}.cart"
+
+    async_to_sync(channel_layer.group_send)(
+        group_name,
+        {
+            "type": "cart_updated",
+            "event_type": "CART_RESET",
+            "message": "테이블이 초기화되어 장바구니가 종료되었습니다.",
+            "data": {
+                "table_usage_id": table_usage_id,
+                "ended": True,
+            },
+        },
+    )

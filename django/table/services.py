@@ -366,6 +366,12 @@ class TableService:
             from order.services import OrderService
             OrderService.cancel_serving_tasks_for_reset(reset_usage_ids, booth.pk)
 
+            from cart.services_ws import broadcast_cart_reset_on_table_end
+            for usage_id in reset_usage_ids:
+                transaction.on_commit(
+                    lambda uid=usage_id: broadcast_cart_reset_on_table_end(uid)
+                )
+
         return found_count
 
 
