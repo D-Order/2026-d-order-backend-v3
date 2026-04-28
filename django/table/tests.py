@@ -431,6 +431,33 @@ class TableResetTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_reset_merged_tables_without_active_session(self):
+        """병합되었지만 IN_USE가 아닌 테이블도 초기화로 병합 해제 가능 (#307)"""
+        self.client.force_authenticate(user=self.user)
+        self.client.post(MERGE_URL, {'table_nums': [1, 2, 3]}, format='json')
+
+        for table_num in [1, 2, 3]:
+            table = Table.objects.get(booth=self.booth, table_num=table_num)
+            self.assertEqual(table.status, Table.Status.ACTIVE)
+            self.assertIsNotNone(table.group)
+
+        response = self.client.post(RESET_URL, {'table_nums': [1]}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for table_num in [1, 2, 3]:
+            table = Table.objects.get(booth=self.booth, table_num=table_num)
+            self.assertEqual(table.status, Table.Status.ACTIVE)
+            self.assertIsNone(table.group)
+
+    def test_reset_idle_unmerged_table_rejected(self):
+        """병합되지 않은 미사용 테이블은 여전히 초기화 거부"""
+        self.client.force_authenticate(user=self.user)
+
+        with suppress_request_warnings():
+            response = self.client.post(RESET_URL, {'table_nums': [1]}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
 
 @override_settings(STORAGES=IN_MEMORY_STORAGES)
 class TableMergeTestCase(APITestCase):

@@ -3,6 +3,7 @@ import logging
 from .models import Table, TableGroup, TableUsage
 from django.utils.timezone import now
 from django.db import transaction
+from django.db.models import Q
 from rest_framework.exceptions import ValidationError, NotFound
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -286,8 +287,11 @@ class TableService:
             table_num__in=table_nums,
         )
 
-        if tables.exclude(status=Table.Status.IN_USE).exists():
-            raise ValidationError('사용중인 테이블만 초기화 할 수 있습니다.')
+        if tables.filter(
+            Q(status=Table.Status.INACTIVE)
+            | Q(status=Table.Status.ACTIVE, group__isnull=True)
+        ).exists():
+            raise ValidationError('사용중이거나 병합된 테이블만 초기화 할 수 있습니다.')
         
         # 3. 존재하지 않는 테이블 확인
         found_count = tables.count()
