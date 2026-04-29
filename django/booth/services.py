@@ -1,8 +1,13 @@
+import logging
+
 from booth.models import Booth
 from menu.models import Menu
 from table.models import Table, TableGroup, TableUsage
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
+
+logger = logging.getLogger(__name__)
+
 
 class BoothService:
 
@@ -17,7 +22,12 @@ class BoothService:
         """
         from table.models import Table
 
-        # 3. Booth 객체 생성
+        logger.debug(
+            "[BoothService.create_booth_for_user] Booth 생성 시도 | user_id=%s | name=%s | seat_type=%s | table_max_cnt=%s",
+            user.id, booth_data.get('name'), booth_data.get('seat_type'), booth_data.get('table_max_cnt')
+        )
+
+        # Booth 객체 생성
         booth = Booth.objects.create(
             user=user,
             name=booth_data['name'],
@@ -30,8 +40,9 @@ class BoothService:
             seat_fee_person=booth_data.get('seat_fee_person'),
             seat_fee_table=booth_data.get('seat_fee_table'),
         )
+        logger.debug("[BoothService.create_booth_for_user] Booth 생성 완료 | booth_id=%s", booth.pk)
 
-        # 4. 테이블 이용료 메뉴 자동 생성
+        # 테이블 이용료 메뉴 자동 생성
         if booth.seat_type == "PP":
             Menu.objects.create(
                 booth=booth,
@@ -41,6 +52,7 @@ class BoothService:
                 price=booth.seat_fee_person or 0,
                 stock=9999
             )
+            logger.debug("[BoothService.create_booth_for_user] FEE 메뉴 생성 (PP) | booth_id=%s | price=%s", booth.pk, booth.seat_fee_person)
         elif booth.seat_type == "PT":
             Menu.objects.create(
                 booth=booth,
@@ -50,6 +62,7 @@ class BoothService:
                 price=booth.seat_fee_table or 0,
                 stock=9999
             )
+            logger.debug("[BoothService.create_booth_for_user] FEE 메뉴 생성 (PT) | booth_id=%s | price=%s", booth.pk, booth.seat_fee_table)
         else:
             Menu.objects.create(
                 booth=booth,
@@ -59,13 +72,22 @@ class BoothService:
                 price=0,
                 stock=9999
             )
+            logger.debug("[BoothService.create_booth_for_user] FEE 메뉴 생성 (FREE) | booth_id=%s", booth.pk)
 
         # 테이블 생성
+        logger.debug(
+            "[BoothService.create_booth_for_user] 테이블 %s개 생성 시작 | booth_id=%s",
+            booth.table_max_cnt, booth.pk
+        )
         for i in range(1, booth.table_max_cnt + 1):
             Table.objects.create(
                 booth=booth,
                 table_num=i
             )
+        logger.info(
+            "[BoothService.create_booth_for_user] 완료 | booth_id=%s | tables=%s | seat_type=%s",
+            booth.pk, booth.table_max_cnt, booth.seat_type
+        )
         return booth
 
     @staticmethod
