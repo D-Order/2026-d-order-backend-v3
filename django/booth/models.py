@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 # For QR
@@ -21,7 +22,7 @@ class Booth(models.Model):
     bank = models.CharField(max_length=50)
 
     # 테이블 정보
-    table_max_cnt = models.IntegerField()
+    table_max_cnt = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(200)])
     table_limit_hours = models.DecimalField(max_digits=4, decimal_places=2)
 
     # 요금 정보

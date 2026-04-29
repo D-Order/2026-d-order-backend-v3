@@ -55,7 +55,7 @@ class Table(models.Model):
 class TableUsage(models.Model):
     id = models.AutoField(primary_key=True)
     table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='usages')
-    started_at = models.DateTimeField()
+    started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     usage_minutes = models.IntegerField(null=True, blank=True)
     accumulated_amount = models.IntegerField(null=False,default=0) # 테이블 세션 누적 총액
@@ -67,5 +67,6 @@ class TableUsage(models.Model):
 
     def __str__(self):
         status = '사용중' if self.ended_at is None else f"{self.usage_minutes}분 사용"
-        return f"[{self.table.booth.name}] 테이블 {self.table.table_num} - {self.started_at:%Y-%m-%d %H:%M} ({status}, {self.accumulated_amount:,}원)"
+        started_str = self.started_at.strftime('%Y-%m-%d %H:%M') if self.started_at else '미시작'
+        return f"[{self.table.booth.name}] 테이블 {self.table.table_num} - {started_str} ({status}, {self.accumulated_amount:,}원)"
     

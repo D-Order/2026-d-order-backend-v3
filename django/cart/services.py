@@ -767,7 +767,11 @@ def _finalize_payment_core(cart: Cart):
     
     table_usage = TableUsage.objects.select_for_update().get(pk=cart.table_usage_id)
     table_usage.accumulated_amount += order.order_price
-    table_usage.save(update_fields=["accumulated_amount"])
+    update_fields = ["accumulated_amount"]
+    if table_usage.started_at is None:
+        table_usage.started_at = timezone.now()
+        update_fields.append("started_at")
+    table_usage.save(update_fields=update_fields)
 
     return order
 
