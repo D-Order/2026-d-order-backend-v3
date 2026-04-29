@@ -47,16 +47,9 @@ def _validate_fee_quantity_policy(*, booth: Booth, quantity: int):
             status_code=400,
         )
 
-    if booth.seat_type == Booth.SEAT_TYPE.PT and quantity != 1:
+    if quantity < 1:
         raise CartError(
-            "테이블비는 1개만 담을 수 있습니다.",
-            "INVALID_FEE_QUANTITY",
-            status_code=400,
-        )
-
-    if booth.seat_type == Booth.SEAT_TYPE.PP and quantity < 1:
-        raise CartError(
-            "인당비 수량은 1 이상이어야 합니다.",
+            "이용료 수량은 1 이상이어야 합니다.",
             "INVALID_FEE_QUANTITY",
             status_code=400,
         )
@@ -767,11 +760,7 @@ def _finalize_payment_core(cart: Cart):
     
     table_usage = TableUsage.objects.select_for_update().get(pk=cart.table_usage_id)
     table_usage.accumulated_amount += order.order_price
-    update_fields = ["accumulated_amount"]
-    if table_usage.started_at is None:
-        table_usage.started_at = timezone.now()
-        update_fields.append("started_at")
-    table_usage.save(update_fields=update_fields)
+    table_usage.save(update_fields=["accumulated_amount"])
 
     return order
 
@@ -793,14 +782,7 @@ def confirm_payment_and_mark_ordered(*, table_usage_id: int) -> Cart:
     cart.save(update_fields=["status", "pending_expires_at"])
 
     final_table_usage_id = cart.table_usage_id
-    table = cart.table_usage.table
-    booth_id = table.booth_id
-    table_num = table.table_num
-
-    from table.services import OrderBroadcastService
-    OrderBroadcastService.broadcast_order_update(
-        booth_id, table_num, final_table_usage_id
-    )
+    booth_id = cart.table_usage.table.booth_id
 
     from .services_ws import broadcast_cart_event
     from order.cache import update_today_revenue
