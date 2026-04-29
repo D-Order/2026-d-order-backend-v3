@@ -752,7 +752,11 @@ class OrderService:
         # ⑧ TableUsage 누적 금액 갱신
         table_usage = TableUsage.objects.select_for_update().get(pk=table_usage_id)
         table_usage.accumulated_amount += order.order_price
-        table_usage.save(update_fields=["accumulated_amount"])
+        update_fields = ["accumulated_amount"]
+        if table_usage.started_at is None:
+            table_usage.started_at = timezone.now()
+            update_fields.append("started_at")
+        table_usage.save(update_fields=update_fields)
 
         logger.info(
             f"[Order 생성 완료] order_id={order.pk}, cart_id={cart_id}, "

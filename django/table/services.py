@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from .models import Table, TableGroup, TableUsage
 from django.utils.timezone import now
@@ -243,7 +244,7 @@ class TableService:
             'type': 'enter_table',
             'data': {
                 'table_num': table_num,
-                'started_at': table_usage.started_at.isoformat(),
+                'started_at': table_usage.started_at.isoformat() if table_usage.started_at else None,
             }
         })
 
@@ -259,7 +260,7 @@ class TableService:
         Returns:
             TableUsage Entity: 생성된 테이블 사용 기록 객체
         """
-        return TableUsage.objects.create(table=table, started_at=now())
+        return TableUsage.objects.create(table=table)
 
     @staticmethod
     @transaction.atomic
@@ -338,9 +339,10 @@ class TableService:
         # usage_minutes 계산 (bulk_update 사용)
         if updated_count > 0:
             for usage in active_usages_cache:
-                usage.usage_minutes = int(
-                    (now_time - usage.started_at).total_seconds() / 60
-                )
+                if usage.started_at:
+                    usage.usage_minutes = int(
+                        (now_time - usage.started_at).total_seconds() / 60
+                    )
             TableUsage.objects.bulk_update(active_usages_cache, fields=['usage_minutes'])
 
         # 6. 테이블 상태 일괄 초기화
@@ -400,13 +402,14 @@ class TableService:
         if not active_usages:
             return
 
-        earliest_started_at = min(u.started_at for u in active_usages)
+        started_ats = [u.started_at for u in active_usages if u.started_at]
+        earliest_started_at = min(started_ats) if started_ats else None
         total_accumulated = sum(u.accumulated_amount for u in active_usages)
 
         # 대표 usage 결정: 대표 테이블의 활성 usage가 없으면 가장 이른 usage를 재할당
         rep_usage = next((u for u in active_usages if u.table_id == representative_table.id), None)
         if rep_usage is None:
-            rep_usage = min(active_usages, key=lambda u: u.started_at)
+            rep_usage = min(active_usages, key=lambda u: u.started_at or datetime.max)
             rep_usage.table = representative_table
             rep_usage.save(update_fields=['table'])
 
