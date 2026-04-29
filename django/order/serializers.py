@@ -78,6 +78,7 @@ class OrderHistoryItemSerializer(serializers.Serializer):
 class OrderHistoryOrderSerializer(serializers.Serializer):
     """주문 내역 – 주문 단위"""
     order_id = serializers.IntegerField()
+    order_number = serializers.IntegerField()
     order_status = serializers.CharField()
     created_at = serializers.CharField()
     has_coupon = serializers.BooleanField()

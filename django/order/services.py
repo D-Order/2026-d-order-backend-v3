@@ -1058,6 +1058,7 @@ class OrderService:
 
             order_list.append({
                 "order_id": order.pk,
+                "order_number": len(order_list) + 1,
                 "order_status": order.order_status,
                 "created_at": timezone.localtime(order.created_at).isoformat(),
                 "has_coupon": has_coupon,
