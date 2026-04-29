@@ -1,6 +1,7 @@
 """
 인증 관련 비즈니스 로직
 """
+import logging
 import uuid
 
 import jwt
@@ -11,6 +12,9 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.exceptions import TokenError
+
+logger = logging.getLogger(__name__)
+
 
 class AuthService:
 
@@ -31,16 +35,29 @@ class AuthService:
         Raises:
             ValueError: 중복된 아이디 등
         """
+        logger.info("[AuthService.signup_user] 시작 | username=%s", username)
 
         # 1. 아이디 중복 체크
         if User.objects.filter(username=username).exists():
+            logger.warning("[AuthService.signup_user] 중복 아이디 | username=%s", username)
             raise ValueError("이미 사용 중인 아이디입니다")
 
         # 2. User 생성
+        logger.debug("[AuthService.signup_user] User 생성 시도 | username=%s", username)
         user = User.objects.create_user(username=username, password=password)
+        logger.debug("[AuthService.signup_user] User 생성 완료 | user_id=%s", user.id)
 
+        # 3. Booth + Menu + Table 생성
+        logger.debug(
+            "[AuthService.signup_user] BoothService 호출 | user_id=%s | booth_data=%s",
+            user.id, booth_data
+        )
         from booth.services import BoothService
         booth = BoothService.create_booth_for_user(user, booth_data)
+        logger.info(
+            "[AuthService.signup_user] 완료 | user_id=%s | booth_id=%s",
+            user.id, booth.pk
+        )
 
         return user
 

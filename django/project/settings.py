@@ -245,7 +245,7 @@ _file_handlers = {} if IS_LOCAL else {
         'backupCount': 5,
         'formatter': 'verbose',
         'encoding': 'utf-8',
-        'level': 'INFO',
+        'level': 'DEBUG',
     },
     'file_error': {
         'class': 'logging.handlers.RotatingFileHandler',
