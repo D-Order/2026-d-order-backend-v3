@@ -141,8 +141,11 @@ class OrderBroadcastService:
                     f"[OrderBroadcast] booth={booth_id} table={table_num} "
                     f"주문 {len(all_orders)}건 브로드캐스트 완료"
                 )
-            except Exception as e:
-                logger.error(f"[OrderBroadcast] 전송 실패: {e}")
+            except Exception:
+                logger.exception(
+                    f"[OrderBroadcast] 전송 실패 booth={booth_id} "
+                    f"table={table_num} table_usage={table_usage_id}"
+                )
 
         transaction.on_commit(_send)
 

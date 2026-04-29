@@ -789,7 +789,14 @@ def confirm_payment_and_mark_ordered(*, table_usage_id: int) -> Cart:
     cart.save(update_fields=["status", "pending_expires_at"])
 
     final_table_usage_id = cart.table_usage_id
-    booth_id = cart.table_usage.table.booth_id
+    table = cart.table_usage.table
+    booth_id = table.booth_id
+    table_num = table.table_num
+
+    from table.services import OrderBroadcastService
+    OrderBroadcastService.broadcast_order_update(
+        booth_id, table_num, final_table_usage_id
+    )
 
     from .services_ws import broadcast_cart_event
     from order.cache import update_today_revenue
