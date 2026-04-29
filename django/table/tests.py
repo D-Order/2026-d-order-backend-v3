@@ -226,7 +226,7 @@ class TableRetrieveTestCase(APITestCase):
         self.assertIn('data', response.data)
 
     def test_retrieve_response_fields(self):
-        """응답 필드 구조 검증 - table_number, table_total_price, order_items"""
+        """응답 필드 구조 검증 - table_number, table_total_price, order_list"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage)
@@ -236,37 +236,38 @@ class TableRetrieveTestCase(APITestCase):
 
         self.assertIn('table_number', data)
         self.assertIn('table_total_price', data)
-        self.assertIn('order_items', data)
+        self.assertIn('order_list', data)
 
-    def test_retrieve_order_items_flat_list(self):
-        """여러 Order의 OrderItem이 하나의 flat list로 반환"""
+    def test_retrieve_order_list_grouped(self):
+        """여러 Order가 order_list로 주문별 그룹핑되어 반환"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='아메리카노', price=4000, quantity=1)
         self._create_order(usage, menu_name='라떼', price=5000, quantity=2)
 
         response = self.client.get(self._detail_url(1))
-        order_items = response.data['data']['order_items']
+        order_list = response.data['data']['order_list']
 
-        self.assertIsInstance(order_items, list)
-        self.assertEqual(len(order_items), 2)
+        self.assertIsInstance(order_list, list)
+        self.assertEqual(len(order_list), 2)
 
     def test_retrieve_order_item_fields(self):
-        """order_items 각 항목에 id, name, quantity, fixed_price, created_at 포함"""
+        """order_list 각 주문의 order_items에 id, name, quantity, fixed_price 포함"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='아메리카노', price=4000, quantity=2)
 
         response = self.client.get(self._detail_url(1))
-        item = response.data['data']['order_items'][0]
+        order = response.data['data']['order_list'][0]
+        item = order['order_items'][0]
 
         self.assertIn('id', item)
         self.assertIsNotNone(item['id'])
         self.assertEqual(item['name'], '아메리카노')
         self.assertEqual(item['quantity'], 2)
         self.assertEqual(item['fixed_price'], 4000)
-        self.assertIn('created_at', item)
-        self.assertIsNotNone(item['created_at'])
+        self.assertIn('order_number', order)
+        self.assertIn('created_at', order)
 
     def test_retrieve_total_price(self):
         """table_total_price가 usage.accumulated_amount와 일치"""
@@ -281,18 +282,18 @@ class TableRetrieveTestCase(APITestCase):
 
         self.assertEqual(response.data['data']['table_total_price'], 13000)
 
-    def test_retrieve_order_items_newest_first(self):
-        """order_items는 최신 항목이 먼저 반환"""
+    def test_retrieve_order_list_order_number(self):
+        """order_list는 주문 순서대로 order_number 부여"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='첫번째메뉴', price=3000, quantity=1)
         self._create_order(usage, menu_name='두번째메뉴', price=3000, quantity=1)
 
         response = self.client.get(self._detail_url(1))
-        order_items = response.data['data']['order_items']
+        order_list = response.data['data']['order_list']
 
-        self.assertEqual(order_items[0]['name'], '두번째메뉴')
-        self.assertEqual(order_items[1]['name'], '첫번째메뉴')
+        self.assertEqual(order_list[0]['order_number'], 1)
+        self.assertEqual(order_list[1]['order_number'], 2)
 
     def test_retrieve_no_active_usage_returns_404(self):
         """활성 세션 없는 테이블 조회 시 404"""
