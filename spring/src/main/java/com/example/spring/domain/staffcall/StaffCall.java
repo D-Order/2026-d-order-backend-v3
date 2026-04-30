@@ -33,7 +33,7 @@ public class StaffCall {
     @Column(name = "table_num")
     private Integer tableNum;
 
-    /** Django cart_cart.cart_price — 결제확인 모달 금액 표시용 */
+    /** emit 시점 부담 금액(쿠폰 할인 반영). Django 장바구니 스냅샷 summary.total 과 맞춤 */
     @Column(name = "cart_price")
     private Integer cartPrice;
 
@@ -46,7 +46,7 @@ public class StaffCall {
     private StaffCallCategory category;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private StaffCallStatus status;
 
     @Column(name = "created_at", nullable = false)
@@ -102,5 +102,14 @@ public class StaffCall {
         this.status = StaffCallStatus.COMPLETED;
         this.completedAt = LocalDateTime.now();
         this.updatedAt = this.completedAt;
+    }
+
+    /** Django 테이블 초기화로 세션이 끊긴 경우 — 활성 호출만 목록에서 제외. */
+    public void cancelDueToTableReset() {
+        if (this.status != StaffCallStatus.PENDING && this.status != StaffCallStatus.ACCEPTED) {
+            return;
+        }
+        this.status = StaffCallStatus.VOIDED_BY_RESET;
+        this.updatedAt = LocalDateTime.now();
     }
 }

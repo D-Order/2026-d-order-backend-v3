@@ -2,6 +2,7 @@ package com.example.spring.service.serving;
 
 import com.example.spring.dto.redis.OrderCookedMessageDto;
 import com.example.spring.event.RedisMessageEvent;
+import com.example.spring.service.staffcall.StaffCallTableResetService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +18,7 @@ import java.util.UUID;
 public class ServingTaskEventListener {
 
     private final ServingTaskService servingTaskService;
+    private final StaffCallTableResetService staffCallTableResetService;
     private final ObjectMapper objectMapper;
 
     @EventListener
@@ -73,6 +75,7 @@ public class ServingTaskEventListener {
                         return;
                     }
                     servingTaskService.removeTasksByTableNumber(boothId, dto.getTableNum(), "TABLE_RESET");
+                    staffCallTableResetService.voidActiveCallsForTable(boothId, dto.getTableNum());
                 }
 
             } catch (Exception e) {
