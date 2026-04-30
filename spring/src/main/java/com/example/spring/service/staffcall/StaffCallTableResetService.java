@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -34,35 +36,48 @@ public class StaffCallTableResetService {
     @Autowired
     private CustomerStaffCallWebSocketHandler customerStaffCallWebSocketHandler;
 
-    @Transactional
-    public void voidActiveCallsForTable(Long boothId, Integer tableNum) {
+    /**
+     * Redis 테이블 초기화와 별도 트랜잭션으로 커밋한다.
+     * 스냅샷 조회(listForBooth)와 같은 트랜잭션에 두면 flush/예외 시 호출 쪽 트랜잭션까지 롤백될 수 있다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<StaffCall> voidActiveCallsForTable(Long boothId, Integer tableNum) {
         if (boothId == null || tableNum == null) {
-            return;
+            return Collections.emptyList();
         }
 
-        List<StaffCall> toVoid = staffCallRepository.findByBoothIdAndTableNumAndStatusNot(
+        List<StaffCall> toVoid = staffCallRepository.findForTableResetVoidCandidates(
                 boothId,
                 tableNum,
                 StaffCallStatus.CANCELLED);
 
         if (toVoid.isEmpty()) {
-            return;
+            log.info("[staffcall table reset] 취소 대상 없음 boothId={}, tableNum={}", boothId, tableNum);
+            return Collections.emptyList();
         }
 
         for (StaffCall sc : toVoid) {
             sc.cancelDueToTableReset();
         }
         staffCallRepository.saveAll(toVoid);
+        log.info("[staffcall table reset] boothId={}, tableNum={}, cancelledCount={}", boothId, tableNum, toVoid.size());
+        return toVoid;
+    }
 
+    /** DB 커밋 이후 호출 — 실패해도 staff_call 취소는 유지된다. */
+    public void publishTableResetNotifications(Long boothId, List<StaffCall> voided) {
+        if (voided == null || voided.isEmpty()) {
+            return;
+        }
         try {
             staffCallWebSocketHandler.broadcastSnapshot(boothId,
                     staffCallQueryService.listForBooth(boothId, 50, 0));
-            for (StaffCall sc : toVoid) {
+            for (StaffCall sc : voided) {
                 customerStaffCallWebSocketHandler.broadcastStatus(sc);
             }
         } catch (Exception e) {
-            log.error("[staffcall table reset] 스냅샷/고객 WS 푸시 실패 — DB 반영은 완료 boothId={}, tableNum={}",
-                    boothId, tableNum, e);
+            log.error("[staffcall table reset] 스냅샷/고객 WS 푸시 실패 — DB 반영은 완료 boothId={}",
+                    boothId, e);
         }
     }
 }
