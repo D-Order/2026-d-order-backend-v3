@@ -12,12 +12,11 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.EnumSet;
 import java.util.List;
 
 /**
  * Django 테이블 초기화 시 Redis({@code django:booth:*:order:reset})와 맞춰
- * 해당 부스·테이블 번호의 활성 직원 호출을 목록에서 제외한다({@link StaffCallStatus#VOIDED_BY_RESET}).
+ * 해당 부스·테이블 번호의 직원 호출을 모두 목록에서 제외한다({@link StaffCallStatus#VOIDED_BY_RESET}).
  */
 @Slf4j
 @Service
@@ -41,24 +40,24 @@ public class StaffCallTableResetService {
             return;
         }
 
-        List<StaffCall> active = staffCallRepository.findByBoothIdAndTableNumAndStatusIn(
+        List<StaffCall> toVoid = staffCallRepository.findByBoothIdAndTableNumWhereStatusNotVoidedByReset(
                 boothId,
                 tableNum,
-                EnumSet.of(StaffCallStatus.PENDING, StaffCallStatus.ACCEPTED));
+                StaffCallStatus.VOIDED_BY_RESET);
 
-        if (active.isEmpty()) {
+        if (toVoid.isEmpty()) {
             return;
         }
 
-        for (StaffCall sc : active) {
+        for (StaffCall sc : toVoid) {
             sc.cancelDueToTableReset();
         }
-        staffCallRepository.saveAll(active);
+        staffCallRepository.saveAll(toVoid);
 
         try {
             staffCallWebSocketHandler.broadcastSnapshot(boothId,
                     staffCallQueryService.listForBooth(boothId, 50, 0));
-            for (StaffCall sc : active) {
+            for (StaffCall sc : toVoid) {
                 customerStaffCallWebSocketHandler.broadcastStatus(sc);
             }
         } catch (Exception e) {
