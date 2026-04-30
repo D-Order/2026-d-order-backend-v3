@@ -20,7 +20,11 @@ public class CartEntity {
     @Column(name = "table_usage_id", nullable = false)
     private Long tableUsageId;
 
-    /** Django cart_cart.cart_price — 장바구니 총 금액 */
+    /** Django cart_cart.cart_price — 품목 합(소계), 쿠폰 전 */
     @Column(name = "cart_price", nullable = false)
     private Integer cartPrice;
+
+    /** Django cart_cart.round — CartCouponApply와 동일 round에 매칭 */
+    @Column(name = "round", nullable = false)
+    private Integer round;
 }

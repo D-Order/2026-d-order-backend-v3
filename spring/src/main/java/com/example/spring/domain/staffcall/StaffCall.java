@@ -33,7 +33,7 @@ public class StaffCall {
     @Column(name = "table_num")
     private Integer tableNum;
 
-    /** Django cart_cart.cart_price — 결제확인 모달 금액 표시용 */
+    /** emit 시점 부담 금액(쿠폰 할인 반영). Django 장바구니 스냅샷 summary.total 과 맞춤 */
     @Column(name = "cart_price")
     private Integer cartPrice;
 
