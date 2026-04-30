@@ -79,12 +79,17 @@ public class OrderCancelService {
 
         // 3) 이벤트 발행/푸시 (마지막에 DELETED 1회)
         publishRedis(sc, "staff_call_deleted");
+        // 커스터머 UI 리셋 트리거(DELETED)는 스냅샷 실패 여부와 무관하게 최대한 보장한다.
+        try {
+            customerStaffCallWebSocketHandler.broadcastDeleted(staffCallId);
+        } catch (Exception e) {
+            log.error("[order cancel] customer WS(DELETED) 푸시 실패 staffCallId={}", staffCallId, e);
+        }
         try {
             staffCallWebSocketHandler.broadcastSnapshot(boothId,
                     staffCallQueryService.listForBooth(boothId, 50, 0));
-            customerStaffCallWebSocketHandler.broadcastDeleted(staffCallId);
         } catch (Exception e) {
-            log.error("[order cancel] 스냅샷 조회/WS 푸시 실패 — 취소는 반영됨 boothId={}", boothId, e);
+            log.error("[order cancel] staff WS snapshot 푸시 실패 boothId={}", boothId, e);
         }
 
         Map<String, Object> out = new HashMap<>();
