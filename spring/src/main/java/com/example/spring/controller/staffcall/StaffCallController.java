@@ -24,7 +24,7 @@ import jakarta.servlet.http.HttpServletRequest;
 @RestController
 @RequestMapping("/server")
 @RequiredArgsConstructor
-public class StaffCallController {
+public class  StaffCallController {
 
     private final StaffCallQueryService staffCallQueryService;
     private final StaffCallService staffCallService;
@@ -89,7 +89,8 @@ public class StaffCallController {
         try {
             Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
             String accessToken = (String) request.getAttribute("ACCESS_TOKEN");
-            StaffCallAcceptResponse data = staffCallService.accept(boothId, accessToken, body);
+            String sessionId = (String) request.getAttribute(ServerApiJwtFilter.ATTR_SESSION_ID);
+            StaffCallAcceptResponse data = staffCallService.accept(boothId, accessToken, sessionId, body);
             return ResponseEntity.ok(Map.of(
                     "message", "호출을 수락했습니다.",
                     "data", data

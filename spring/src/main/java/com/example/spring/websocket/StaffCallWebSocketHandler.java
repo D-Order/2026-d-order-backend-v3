@@ -1,10 +1,13 @@
 package com.example.spring.websocket;
 
 import com.example.spring.service.staffcall.StaffCallQueryService;
+import com.example.spring.service.staffcall.StaffCallService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -18,6 +21,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static com.example.spring.config.StaffCallHandshakeInterceptor.ATTR_BOOTH_ID;
+import static com.example.spring.config.StaffCallHandshakeInterceptor.ATTR_SESSION_ID;
 
 /**
  * 부스 단위 직원 호출 목록 — LIST 요청 및 서버 푸시(STAFF_CALL_SNAPSHOT)
@@ -29,6 +33,10 @@ public class StaffCallWebSocketHandler extends TextWebSocketHandler {
 
     private final StaffCallQueryService staffCallQueryService;
     private final ObjectMapper objectMapper;
+
+    @Lazy
+    @Autowired
+    private StaffCallService staffCallService;
 
     private final Map<Long, Set<WebSocketSession>> boothSessions = new ConcurrentHashMap<>();
 
@@ -49,6 +57,7 @@ public class StaffCallWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         Long boothId = (Long) session.getAttributes().get(ATTR_BOOTH_ID);
+        String sessionId = (String) session.getAttributes().get(ATTR_SESSION_ID);
         if (boothId != null) {
             Set<WebSocketSession> set = boothSessions.get(boothId);
             if (set != null) {
@@ -56,6 +65,13 @@ public class StaffCallWebSocketHandler extends TextWebSocketHandler {
                 if (set.isEmpty()) {
                     boothSessions.remove(boothId);
                 }
+            }
+        }
+        if (sessionId != null) {
+            try {
+                staffCallService.releaseBySessionId(sessionId);
+            } catch (Exception e) {
+                log.error("[staffcall ws] disconnect 자동 해제 실패 sessionId={}", sessionId, e);
             }
         }
     }

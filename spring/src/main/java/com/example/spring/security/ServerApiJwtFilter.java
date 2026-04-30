@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 public class ServerApiJwtFilter extends OncePerRequestFilter {
 
     public static final String ATTR_BOOTH_ID = "BOOTH_ID";
+    public static final String ATTR_SESSION_ID = "SESSION_ID";
 
     private final CookieUtil cookieUtil;
     private final JwtUtil jwtUtil;
@@ -62,7 +63,9 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
 
         try {
             Long boothId = jwtUtil.getBoothIdFromToken(token);
+            String sessionId = jwtUtil.getSessionIdFromToken(token);
             request.setAttribute(ATTR_BOOTH_ID, boothId);
+            request.setAttribute(ATTR_SESSION_ID, sessionId);
             request.setAttribute("ACCESS_TOKEN", token);
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

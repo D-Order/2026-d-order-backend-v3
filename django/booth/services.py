@@ -155,4 +155,21 @@ class BoothService:
         #    Cart.table_usage가 CASCADE이므로 Cart도 함께 삭제됨
         deleted_count, _ = TableUsage.objects.filter(table__booth=booth).delete()
 
+        # 5. 총매출 0 초기화 WebSocket 전송 (트랜잭션 커밋 후)
+        def _send_ws_after_commit():
+            try:
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                channel_layer = get_channel_layer()
+                group_name = f"booth_{booth.pk}.order"
+                async_to_sync(channel_layer.group_send)(
+                    group_name,
+                    {"type": "total_sales_update", "data": {"today_revenue": 0}}
+                )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"[부스 초기화] 총매출 WebSocket 전송 실패: {e}")
+
+        transaction.on_commit(_send_ws_after_commit)
+
         return deleted_count
