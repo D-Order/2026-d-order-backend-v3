@@ -1,6 +1,8 @@
 package com.example.spring.controller.serving;
 
 import com.example.spring.domain.serving.ServingTask;
+import com.example.spring.dto.serving.response.ServingFilterOptionsData;
+import com.example.spring.dto.serving.response.ServingFilterOptionsResponse;
 import com.example.spring.dto.serving.response.ServingTaskResponse;
 import com.example.spring.security.ServerApiJwtFilter;
 import com.example.spring.service.serving.ServingTaskService;
@@ -11,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/serving")
@@ -61,6 +64,29 @@ public class ServingTaskController {
                 .toList();
 
         return ResponseEntity.ok(response);
+    }
+
+
+    @GetMapping("/filter-options")
+    public ResponseEntity<?> getFilterOptions(HttpServletRequest request) {
+        Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
+        String accessToken = (String) request.getAttribute("ACCESS_TOKEN");
+
+        if (boothId == null || accessToken == null || accessToken.isBlank()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        try {
+            ServingFilterOptionsData data = servingTaskService.getFilterOptions(boothId, accessToken);
+            ServingFilterOptionsResponse response = ServingFilterOptionsResponse.builder()
+                    .message("서빙 필터 옵션 조회 완료")
+                    .data(data)
+                    .build();
+            return ResponseEntity.ok(response);
+        } catch (ServingTaskService.DjangoApiException e) {
+            return ResponseEntity.status(e.getStatus())
+                    .body(Map.of("message", "서빙 필터 옵션 조회 실패", "detail", e.getResponseBody()));
+        }
     }
 
     @PostMapping("/catchcall")
