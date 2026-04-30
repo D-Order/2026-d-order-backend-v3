@@ -9,5 +9,6 @@ import java.util.List;
 @AllArgsConstructor
 public class ServingFilterOptionsData {
     private List<ServingMenuFilterOption> menus;
+    private Integer tableCount;
     private List<Integer> tables;
 }

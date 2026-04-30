@@ -1,8 +1,11 @@
 package com.example.spring.service.serving;
 
+import com.example.spring.config.DjangoApiUtil;
 import com.example.spring.domain.serving.ServingStatus;
 import com.example.spring.domain.serving.ServingTask;
 import com.example.spring.dto.redis.ServingStatusMessageDto;
+import com.example.spring.dto.serving.django.DjangoAdminMenuListResponse;
+import com.example.spring.dto.serving.django.DjangoBoothMypageResponse;
 import com.example.spring.dto.serving.response.ServingFilterOptionsData;
 import com.example.spring.dto.serving.response.ServingMenuFilterOption;
 import com.example.spring.dto.serving.response.ServingTaskResponse;
@@ -11,11 +14,16 @@ import com.example.spring.websocket.ServingWebSocketHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
-import java.time.OffsetDateTime; // 🌟 LocalDateTime -> OffsetDateTime 으로 변경
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +43,24 @@ public class ServingTaskService {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private final ServingWebSocketHandler webSocketHandler;
+    private final RestTemplate restTemplate;
+
+    @Value("${django.api.base-url}")
+    private String djangoApiBaseUrl;
+
+    public static class DjangoApiException extends RuntimeException {
+        private final HttpStatus status;
+        private final String responseBody;
+
+        public DjangoApiException(HttpStatus status, String responseBody) {
+            super("Django API Error: " + status);
+            this.status = status;
+            this.responseBody = responseBody;
+        }
+
+        public HttpStatus getStatus() { return status; }
+        public String getResponseBody() { return responseBody; }
+    }
 
     @Transactional(readOnly = true)
     public List<ServingTask> getPendingServingCalls(Long boothId) {
@@ -44,8 +70,96 @@ public class ServingTaskService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public ServingFilterOptionsData getFilterOptions(Long boothId, String accessToken) {
+        DjangoAdminMenuListResponse menuListResponse = fetchDjangoMenuList(accessToken);
+        DjangoBoothMypageResponse mypageResponse = fetchDjangoBoothMypage(accessToken);
+
+        List<ServingMenuFilterOption> menus = new ArrayList<>();
+        List<DjangoAdminMenuListResponse.MenuItem> menuItems = menuListResponse != null ? menuListResponse.getData() : null;
+        if (menuItems != null) {
+            for (DjangoAdminMenuListResponse.MenuItem item : menuItems) {
+                if (item == null || item.getId() == null || item.getName() == null) {
+                    continue;
+                }
+                menus.add(new ServingMenuFilterOption(item.getId(), item.getName()));
+            }
+        }
+
+        Integer tableCount = 0;
+        if (mypageResponse != null && mypageResponse.getData() != null && mypageResponse.getData().getTableMaxCnt() != null) {
+            tableCount = mypageResponse.getData().getTableMaxCnt();
+        }
+
+        List<Integer> tables = new ArrayList<>();
+        for (int i = 1; i <= tableCount; i++) {
+            tables.add(i);
+        }
+
+        return new ServingFilterOptionsData(menus, tableCount, tables);
+    }
+
+    private DjangoAdminMenuListResponse fetchDjangoMenuList(String accessToken) {
+        String url = djangoApiBaseUrl + "/api/v3/django/booth/menu-list/";
+        HttpEntity<Void> requestEntity = new HttpEntity<>(buildDjangoAuthHeaders(accessToken));
+
+        try {
+            ResponseEntity<DjangoAdminMenuListResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    requestEntity,
+                    DjangoAdminMenuListResponse.class
+            );
+            return response.getBody();
+        } catch (HttpClientErrorException e) {
+            throw new DjangoApiException(HttpStatus.valueOf(e.getStatusCode().value()), e.getResponseBodyAsString());
+        }
+    }
+
+    private DjangoBoothMypageResponse fetchDjangoBoothMypage(String accessToken) {
+        String url = djangoApiBaseUrl + "/api/v3/django/booth/mypage/";
+        HttpEntity<Void> requestEntity = new HttpEntity<>(buildDjangoAuthHeaders(accessToken));
+
+        try {
+            ResponseEntity<DjangoBoothMypageResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    requestEntity,
+                    DjangoBoothMypageResponse.class
+            );
+            return response.getBody();
+        } catch (HttpClientErrorException e) {
+            throw new DjangoApiException(HttpStatus.valueOf(e.getStatusCode().value()), e.getResponseBodyAsString());
+        }
+    }
+
+    private HttpHeaders buildDjangoAuthHeaders(String accessToken) {
+        Map<String, String> csrfData = DjangoApiUtil.getCsrfToken(restTemplate, djangoApiBaseUrl);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        if (csrfData.get("csrfToken") != null) {
+            headers.set("X-CSRFToken", csrfData.get("csrfToken"));
+        }
+
+        StringBuilder cookieBuilder = new StringBuilder();
+        if (csrfData.get("csrfCookie") != null) {
+            cookieBuilder.append(csrfData.get("csrfCookie"));
+        }
+        if (accessToken != null) {
+            if (cookieBuilder.length() > 0) {
+                cookieBuilder.append("; ");
+            }
+            cookieBuilder.append("access_token=").append(accessToken);
+        }
+        if (cookieBuilder.length() > 0) {
+            headers.set(HttpHeaders.COOKIE, cookieBuilder.toString());
+        }
+
+        return headers;
+    }
+
     @Transactional
-    // 🌟 catchedBy 파라미터 삭제됨
     public void catchCall(Long taskId, Long boothId) {
         String lockKey = "lock:serving_task:" + taskId;
         Boolean isAcquired = redisTemplate.opsForValue()
@@ -67,10 +181,8 @@ public class ServingTaskService {
                 throw new IllegalStateException("이미 처리된 요청입니다.");
             }
 
-            // 🌟 actor(catchedBy) 전달 제거
             task.acceptServing();
 
-            // 🌟 publishToDjango 호출 시 파라미터 수정 (null 제외)
             publishToDjango(boothId, "serving", task.getOrderItemId());
             webSocketHandler.broadcastEvent("CATCH_CALL", ServingTaskResponse.from(task));
 
@@ -109,9 +221,6 @@ public class ServingTaskService {
         webSocketHandler.broadcastEvent("CANCEL_CALL", ServingTaskResponse.from(task));
     }
 
-    /**
-     * Django -> Spring : 조리 완료 알림 수신 시 새 serving_task 생성
-     */
     @Transactional
     public void createNewServingTask(Long boothId, Long orderItemId, Integer tableNumber, String menuName, Integer quantity, String key) {
         boolean alreadyExists = servingTaskRepository
@@ -140,23 +249,6 @@ public class ServingTaskService {
 
         webSocketHandler.broadcastEvent("NEW_CALL", ServingTaskResponse.from(newTask));
         log.info("[새 서빙 요청 생성 및 브로드캐스트] boothId={}, orderItemId={}", boothId, orderItemId);
-    }
-
-
-
-    @Transactional(readOnly = true)
-    public ServingFilterOptionsData getFilterOptions(Long boothId) {
-        List<String> menuNames = servingTaskRepository
-                .findDistinctMenuNamesByBoothIdAndStatus(boothId, ServingStatus.SERVE_REQUESTED);
-
-        List<ServingMenuFilterOption> menus = menuNames.stream()
-                .map(menuName -> new ServingMenuFilterOption(menuName, menuName))
-                .toList();
-
-        List<Integer> tables = servingTaskRepository
-                .findDistinctTableNumbersByBoothIdAndStatus(boothId, ServingStatus.SERVE_REQUESTED);
-
-        return new ServingFilterOptionsData(menus, tables);
     }
 
     @Transactional
@@ -211,13 +303,11 @@ public class ServingTaskService {
         return payload;
     }
 
-    // 🌟 catchedBy 파라미터 삭제
     private void publishToDjango(Long boothId, String status, Long orderItemId) {
         try {
             ServingStatusMessageDto messageDto = ServingStatusMessageDto.builder()
                     .orderItemId(orderItemId)
                     .status(status)
-                    // 🌟 OffsetDateTime 적용
                     .pushedAt(OffsetDateTime.now())
                     .build();
 

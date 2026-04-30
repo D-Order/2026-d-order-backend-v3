@@ -6,6 +6,6 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public class ServingMenuFilterOption {
-    private String id;
+    private Long id;
     private String name;
 }
