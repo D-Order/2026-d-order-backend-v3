@@ -5,5 +5,4 @@ public enum StaffCallStatus {
     ACCEPTED,
     COMPLETED,
     CANCELLED,
-    VOIDED_BY_RESET,
 }

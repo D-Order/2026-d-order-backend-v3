@@ -16,7 +16,7 @@ import java.util.List;
 
 /**
  * Django 테이블 초기화 시 Redis({@code django:booth:*:order:reset})와 맞춰
- * 해당 부스·테이블 번호의 직원 호출을 모두 목록에서 제외한다({@link StaffCallStatus#VOIDED_BY_RESET}).
+ * 해당 부스·테이블 번호의 직원 호출을 {@link StaffCallStatus#CANCELLED}로 맞춘다(이미 취소된 행은 스킵).
  */
 @Slf4j
 @Service
@@ -40,10 +40,10 @@ public class StaffCallTableResetService {
             return;
         }
 
-        List<StaffCall> toVoid = staffCallRepository.findByBoothIdAndTableNumWhereStatusNotVoidedByReset(
+        List<StaffCall> toVoid = staffCallRepository.findByBoothIdAndTableNumAndStatusNot(
                 boothId,
                 tableNum,
-                StaffCallStatus.VOIDED_BY_RESET);
+                StaffCallStatus.CANCELLED);
 
         if (toVoid.isEmpty()) {
             return;

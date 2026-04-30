@@ -104,12 +104,12 @@ public class StaffCall {
         this.updatedAt = this.completedAt;
     }
 
-    /** Django 테이블 초기화로 해당 테이블 호출 이력을 목록에서 제외(PENDING/ACCEPTED/COMPLETED 등 전부). */
+    /** Django 테이블 초기화로 해당 테이블 호출을 취소 처리(PENDING/ACCEPTED/COMPLETED 등 → {@link StaffCallStatus#CANCELLED}). */
     public void cancelDueToTableReset() {
-        if (this.status == StaffCallStatus.VOIDED_BY_RESET) {
+        if (this.status == StaffCallStatus.CANCELLED) {
             return;
         }
-        this.status = StaffCallStatus.VOIDED_BY_RESET;
+        this.status = StaffCallStatus.CANCELLED;
         this.updatedAt = LocalDateTime.now();
     }
 }

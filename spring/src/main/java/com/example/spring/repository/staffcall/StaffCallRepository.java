@@ -69,12 +69,10 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             Collection<StaffCallStatus> statuses
     );
 
-    /** 테이블 초기화 시 해당 부스·테이블 번호의 모든 호출을 무효화하기 위해, 이미 무효인 행은 제외한다. */
-    @Query("SELECT sc FROM StaffCall sc WHERE sc.boothId = :boothId AND sc.tableNum = :tableNum "
-            + "AND sc.status <> :voidedByReset")
-    List<StaffCall> findByBoothIdAndTableNumWhereStatusNotVoidedByReset(
-            @Param("boothId") Long boothId,
-            @Param("tableNum") Integer tableNum,
-            @Param("voidedByReset") StaffCallStatus voidedByReset
+    /** 테이블 초기화 시 무효화 대상: 이미 {@link StaffCallStatus#CANCELLED}인 행은 제외. */
+    List<StaffCall> findByBoothIdAndTableNumAndStatusNot(
+            Long boothId,
+            Integer tableNum,
+            StaffCallStatus status
     );
 }
