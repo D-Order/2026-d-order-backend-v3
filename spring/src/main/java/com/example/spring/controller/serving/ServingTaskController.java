@@ -1,6 +1,8 @@
 package com.example.spring.controller.serving;
 
 import com.example.spring.domain.serving.ServingTask;
+import com.example.spring.dto.serving.response.ServingFilterOptionsData;
+import com.example.spring.dto.serving.response.ServingFilterOptionsResponse;
 import com.example.spring.dto.serving.response.ServingTaskResponse;
 import com.example.spring.security.ServerApiJwtFilter;
 import com.example.spring.service.serving.ServingTaskService;
@@ -59,6 +61,24 @@ public class ServingTaskController {
         List<ServingTaskResponse> response = tasks.stream()
                 .map(ServingTaskResponse::from)
                 .toList();
+
+        return ResponseEntity.ok(response);
+    }
+
+
+    @GetMapping("/filter-options")
+    public ResponseEntity<ServingFilterOptionsResponse> getFilterOptions(HttpServletRequest request) {
+        Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
+
+        if (boothId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        ServingFilterOptionsData data = servingTaskService.getFilterOptions(boothId);
+        ServingFilterOptionsResponse response = ServingFilterOptionsResponse.builder()
+                .message("서빙 필터 옵션 조회 완료")
+                .data(data)
+                .build();
 
         return ResponseEntity.ok(response);
     }

@@ -3,6 +3,8 @@ package com.example.spring.service.serving;
 import com.example.spring.domain.serving.ServingStatus;
 import com.example.spring.domain.serving.ServingTask;
 import com.example.spring.dto.redis.ServingStatusMessageDto;
+import com.example.spring.dto.serving.response.ServingFilterOptionsData;
+import com.example.spring.dto.serving.response.ServingMenuFilterOption;
 import com.example.spring.dto.serving.response.ServingTaskResponse;
 import com.example.spring.repository.serving.ServingTaskRepository;
 import com.example.spring.websocket.ServingWebSocketHandler;
@@ -111,7 +113,7 @@ public class ServingTaskService {
      * Django -> Spring : 조리 완료 알림 수신 시 새 serving_task 생성
      */
     @Transactional
-    public void createNewServingTask(Long boothId, Long orderItemId, Integer tableNumber, String key) {
+    public void createNewServingTask(Long boothId, Long orderItemId, Integer tableNumber, String menuName, Integer quantity, String key) {
         boolean alreadyExists = servingTaskRepository
                 .findFirstByBoothIdAndOrderItemIdAndStatusIn(
                         boothId,
@@ -129,6 +131,8 @@ public class ServingTaskService {
                 .boothId(boothId)
                 .orderItemId(orderItemId)
                 .tableNumber(tableNumber)
+                .menuName(menuName)
+                .quantity(quantity)
                 .key(key)
                 .build();
 
@@ -136,6 +140,23 @@ public class ServingTaskService {
 
         webSocketHandler.broadcastEvent("NEW_CALL", ServingTaskResponse.from(newTask));
         log.info("[새 서빙 요청 생성 및 브로드캐스트] boothId={}, orderItemId={}", boothId, orderItemId);
+    }
+
+
+
+    @Transactional(readOnly = true)
+    public ServingFilterOptionsData getFilterOptions(Long boothId) {
+        List<String> menuNames = servingTaskRepository
+                .findDistinctMenuNamesByBoothIdAndStatus(boothId, ServingStatus.SERVE_REQUESTED);
+
+        List<ServingMenuFilterOption> menus = menuNames.stream()
+                .map(menuName -> new ServingMenuFilterOption(menuName, menuName))
+                .toList();
+
+        List<Integer> tables = servingTaskRepository
+                .findDistinctTableNumbersByBoothIdAndStatus(boothId, ServingStatus.SERVE_REQUESTED);
+
+        return new ServingFilterOptionsData(menus, tables);
     }
 
     @Transactional
@@ -167,13 +188,7 @@ public class ServingTaskService {
                     buildRemoveCallPayload(boothId, reason, deletedCount, null, tableNumber)
             );
         }
-        if ("TABLE_RESET".equals(reason)) {
-            log.info("[테이블 초기화] 서빙태스크 삭제 boothId={}, tableNumber={}, deletedCount={}",
-                    boothId, tableNumber, deletedCount);
-        } else {
-            log.info("[테이블 기준 서빙 요청 삭제] boothId={}, tableNumber={}, reason={}, deletedCount={}",
-                    boothId, tableNumber, reason, deletedCount);
-        }
+        log.info("[테이블 기준 서빙 요청 삭제] boothId={}, tableNumber={}, reason={}, deletedCount={}", boothId, tableNumber, reason, deletedCount);
     }
 
     private Map<String, Object> buildRemoveCallPayload(
