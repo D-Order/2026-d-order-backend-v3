@@ -69,10 +69,12 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             Collection<StaffCallStatus> statuses
     );
 
-    /** 테이블 초기화 시 무효화 대상: 이미 {@link StaffCallStatus#CANCELLED}인 행은 제외. */
-    List<StaffCall> findByBoothIdAndTableNumAndStatusNot(
-            Long boothId,
-            Integer tableNum,
-            StaffCallStatus status
+    /** 테이블 초기화 시 취소 대상: 이미 {@link StaffCallStatus#CANCELLED}인 행은 제외. */
+    @Query("SELECT sc FROM StaffCall sc WHERE sc.boothId = :boothId AND sc.tableNum = :tableNum "
+            + "AND sc.status <> :excludedStatus")
+    List<StaffCall> findForTableResetVoidCandidates(
+            @Param("boothId") Long boothId,
+            @Param("tableNum") Integer tableNum,
+            @Param("excludedStatus") StaffCallStatus excludedStatus
     );
 }

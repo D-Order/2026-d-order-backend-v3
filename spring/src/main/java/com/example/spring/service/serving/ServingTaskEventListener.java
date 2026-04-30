@@ -2,6 +2,7 @@ package com.example.spring.service.serving;
 
 import com.example.spring.dto.redis.OrderCookedMessageDto;
 import com.example.spring.event.RedisMessageEvent;
+import com.example.spring.domain.staffcall.StaffCall;
 import com.example.spring.service.staffcall.StaffCallTableResetService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -10,6 +11,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -75,7 +77,9 @@ public class ServingTaskEventListener {
                         return;
                     }
                     servingTaskService.removeTasksByTableNumber(boothId, dto.getTableNum(), "TABLE_RESET");
-                    staffCallTableResetService.voidActiveCallsForTable(boothId, dto.getTableNum());
+                    List<StaffCall> voided = staffCallTableResetService.voidActiveCallsForTable(
+                            boothId, dto.getTableNum());
+                    staffCallTableResetService.publishTableResetNotifications(boothId, voided);
                 }
 
             } catch (Exception e) {
