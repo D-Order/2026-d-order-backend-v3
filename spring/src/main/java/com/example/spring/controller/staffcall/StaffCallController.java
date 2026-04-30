@@ -6,9 +6,11 @@ import com.example.spring.dto.staffcall.request.StaffCallCompleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallDeleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.request.StaffCallListRequest;
+import com.example.spring.dto.staffcall.request.OrderCancelRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
 import com.example.spring.security.ServerApiJwtFilter;
 import com.example.spring.service.staffcall.StaffCallConflictException;
+import com.example.spring.service.staffcall.OrderCancelService;
 import com.example.spring.service.staffcall.StaffCallQueryService;
 import com.example.spring.service.staffcall.StaffCallService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class StaffCallController {
 
     private final StaffCallQueryService staffCallQueryService;
     private final StaffCallService staffCallService;
+    private final OrderCancelService orderCancelService;
 
     /**
      * 직원 호출 발생 — 경로를 {@code /staffcall/{boothId}} 보다 먼저 등록 (request가 boothId로 오인되지 않도록)
@@ -127,6 +130,28 @@ public class StaffCallController {
             Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
             String accessToken = (String) request.getAttribute("ACCESS_TOKEN");
             return ResponseEntity.ok(staffCallService.cancelAccept(boothId, accessToken, body));
+        } catch (StaffCallConflictException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * 주문 취소(직원/운영) 단일 API.
+     * - Django 결제취소(payment-cancel) 성공 시에만 staffcall을 삭제하고
+     * - 마지막에 커스터머에게 DELETED를 1회 푸시한다.
+     *
+     * POST /api/v3/spring/server/order/cancel
+     */
+    @PostMapping("/order/cancel")
+    public ResponseEntity<Map<String, Object>> cancelOrder(
+            @RequestBody OrderCancelRequest body,
+            HttpServletRequest request) {
+        try {
+            Long boothId = (Long) request.getAttribute(ServerApiJwtFilter.ATTR_BOOTH_ID);
+            Long staffCallId = body != null ? body.getStaffCallId() : null;
+            return ResponseEntity.ok(orderCancelService.cancelOrder(boothId, staffCallId));
         } catch (StaffCallConflictException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (IllegalArgumentException e) {

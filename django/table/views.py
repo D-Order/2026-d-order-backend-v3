@@ -37,9 +37,8 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         }, status=status.HTTP_200_OK)
 
     def retrieve(self, request, *args, **kwargs):
-        from order.models import OrderItem
         from order.serializers import AdminTableOrderHistoryResponseSerializer
-        from django.utils import timezone
+        from order.services import OrderService
 
         instance = self.get_queryset().filter(table_num=kwargs.get('table_num')).first()
         if not instance:
@@ -49,29 +48,7 @@ class TableManagementViewSet(viewsets.ReadOnlyModelViewSet):
         if not usage:
             return Response({'message': '활성 테이블 세션이 없습니다.'}, status=status.HTTP_404_NOT_FOUND)
 
-        items = (
-            OrderItem.objects
-            .filter(order__table_usage=usage, parent__isnull=True)
-            .exclude(status='CANCELLED')
-            .select_related('menu', 'setmenu')
-            .order_by('-id')
-        )
-        order_items = [
-            {
-                'id' : item.id,
-                'name': item.setmenu.name if item.setmenu_id else (item.menu.name if item.menu else '알 수 없음'),
-                'quantity': item.quantity,
-                'fixed_price': item.fixed_price,
-                'created_at': timezone.localtime(item.created_at),
-            }
-            for item in items
-        ]
-
-        response_data = {
-            'table_number': str(instance.table_num),
-            'table_total_price': usage.accumulated_amount,
-            'order_items': order_items,
-        }
+        response_data = OrderService.build_order_history_data(usage)
         serializer = AdminTableOrderHistoryResponseSerializer(response_data)
         return Response({
             'message': '테이블 디테일을 조회했습니다.',

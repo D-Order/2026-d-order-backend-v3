@@ -167,7 +167,13 @@ public class ServingTaskService {
                     buildRemoveCallPayload(boothId, reason, deletedCount, null, tableNumber)
             );
         }
-        log.info("[테이블 기준 서빙 요청 삭제] boothId={}, tableNumber={}, reason={}, deletedCount={}", boothId, tableNumber, reason, deletedCount);
+        if ("TABLE_RESET".equals(reason)) {
+            log.info("[테이블 초기화] 서빙태스크 삭제 boothId={}, tableNumber={}, deletedCount={}",
+                    boothId, tableNumber, deletedCount);
+        } else {
+            log.info("[테이블 기준 서빙 요청 삭제] boothId={}, tableNumber={}, reason={}, deletedCount={}",
+                    boothId, tableNumber, reason, deletedCount);
+        }
     }
 
     private Map<String, Object> buildRemoveCallPayload(

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from .models import Table, TableGroup, TableUsage
 from django.utils.timezone import now
@@ -141,8 +142,11 @@ class OrderBroadcastService:
                     f"[OrderBroadcast] booth={booth_id} table={table_num} "
                     f"주문 {len(all_orders)}건 브로드캐스트 완료"
                 )
-            except Exception as e:
-                logger.error(f"[OrderBroadcast] 전송 실패: {e}")
+            except Exception:
+                logger.exception(
+                    f"[OrderBroadcast] 전송 실패 booth={booth_id} "
+                    f"table={table_num} table_usage={table_usage_id}"
+                )
 
         transaction.on_commit(_send)
 
@@ -212,8 +216,9 @@ class TableService:
         if not table_num:
             raise ValidationError('테이블 번호는 필수입니다.')
 
-        # 테이블 조회
-        table = Table.objects.select_related('group__representative_table').filter(
+        # 테이블 조회 (행 잠금: 동시 입장 요청 시 TOCTOU 경합 방지)
+        # of=('self',): nullable outer join 대상 제외, Table 행만 잠금
+        table = Table.objects.select_related('group__representative_table').select_for_update(of=('self',)).filter(
             booth=booth, table_num=table_num
         ).first()
         if not table:
@@ -223,8 +228,13 @@ class TableService:
         if table.status == Table.Status.INACTIVE:
             raise ValidationError('해당 테이블은 현재 이용할 수 없습니다.')
 
-        # 병합된 테이블이면 대표 테이블 기준으로 처리
-        representative_table = table.group.representative_table if table.group else table
+        # 병합된 테이블이면 대표 테이블 기준으로 처리 (대표 테이블도 잠금)
+        if table.group:
+            representative_table = Table.objects.select_for_update().get(
+                pk=table.group.representative_table_id
+            )
+        else:
+            representative_table = table
 
         # 이미 사용 중인 경우 대표 테이블의 기존 세션 반환
         if table.status == Table.Status.IN_USE:
@@ -243,7 +253,7 @@ class TableService:
             'type': 'enter_table',
             'data': {
                 'table_num': table_num,
-                'started_at': table_usage.started_at.isoformat(),
+                'started_at': table_usage.started_at.isoformat() if table_usage.started_at else None,
             }
         })
 
@@ -259,7 +269,7 @@ class TableService:
         Returns:
             TableUsage Entity: 생성된 테이블 사용 기록 객체
         """
-        return TableUsage.objects.create(table=table, started_at=now())
+        return TableUsage.objects.create(table=table)
 
     @staticmethod
     @transaction.atomic
@@ -338,9 +348,10 @@ class TableService:
         # usage_minutes 계산 (bulk_update 사용)
         if updated_count > 0:
             for usage in active_usages_cache:
-                usage.usage_minutes = int(
-                    (now_time - usage.started_at).total_seconds() / 60
-                )
+                if usage.started_at:
+                    usage.usage_minutes = int(
+                        (now_time - usage.started_at).total_seconds() / 60
+                    )
             TableUsage.objects.bulk_update(active_usages_cache, fields=['usage_minutes'])
 
         # 6. 테이블 상태 일괄 초기화
@@ -400,13 +411,14 @@ class TableService:
         if not active_usages:
             return
 
-        earliest_started_at = min(u.started_at for u in active_usages)
+        started_ats = [u.started_at for u in active_usages if u.started_at]
+        earliest_started_at = min(started_ats) if started_ats else None
         total_accumulated = sum(u.accumulated_amount for u in active_usages)
 
         # 대표 usage 결정: 대표 테이블의 활성 usage가 없으면 가장 이른 usage를 재할당
         rep_usage = next((u for u in active_usages if u.table_id == representative_table.id), None)
         if rep_usage is None:
-            rep_usage = min(active_usages, key=lambda u: u.started_at)
+            rep_usage = min(active_usages, key=lambda u: u.started_at or datetime.max)
             rep_usage.table = representative_table
             rep_usage.save(update_fields=['table'])
 

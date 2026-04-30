@@ -14,6 +14,7 @@ import com.example.spring.dto.staffcall.request.StaffCallDeleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
 import com.example.spring.dto.staffcall.response.StaffCallItemResponse;
+import com.example.spring.service.cart.CartPayableAmountService;
 import com.example.spring.repository.cart.CartEntityRepository;
 import com.example.spring.repository.staffcall.StaffCallRepository;
 import com.example.spring.repository.table.BoothTableRepository;
@@ -43,6 +44,7 @@ public class StaffCallService {
     private final StaffCallQueryService staffCallQueryService;
     private final BoothTableRepository boothTableRepository;
     private final CartEntityRepository cartEntityRepository;
+    private final CartPayableAmountService cartPayableAmountService;
     private final TableUsageEntityRepository tableUsageEntityRepository;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
@@ -115,6 +117,14 @@ public class StaffCallService {
 
         if (!boothId.equals(sc.getBoothId())) {
             throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
+        }
+
+        // 멱등성: 이미 PENDING이면 취소된 상태로 간주하고 그대로 성공 처리
+        if (sc.getStatus() == StaffCallStatus.PENDING) {
+            Map<String, Object> out = new HashMap<>();
+            out.put("message", "이미 호출 수락이 취소된 상태입니다.");
+            out.put("data", StaffCallItemResponse.from(sc));
+            return out;
         }
 
         if (sc.getStatus() != StaffCallStatus.ACCEPTED) {
@@ -259,12 +269,14 @@ public class StaffCallService {
             throw new StaffCallConflictException("동일한 호출이 이미 진행 중입니다.");
         }
 
+        int displayCartPrice = cartPayableAmountService.resolvePayableTotal(cart);
+
         StaffCall sc = StaffCall.builder()
                 .boothId(boothId)
                 .tableId(actualTableId)
                 .tableUsageId(cart.getTableUsageId())
                 .tableNum(table.getTableNum())
-                .cartPrice(cart.getCartPrice())
+                .cartPrice(displayCartPrice)
                 .cartId(req.getCartId())
                 .callType(req.getCallType())
                 .category(req.getCategory())

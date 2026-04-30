@@ -1,6 +1,7 @@
 """
 인증 관련 View (HTTP 요청/응답만 처리) 나머지는 service로 분리함
 """
+import logging
 from django.conf import settings
 import jwt
 from django.utils.decorators import method_decorator
@@ -16,21 +17,32 @@ from authentication.services import AuthService
 from authentication.utils import set_jwt_cookies, delete_jwt_cookies
 from authentication.serializers import UserBoothSignupSerializer
 
+logger = logging.getLogger(__name__)
+
 
 class SignupAPIView(APIView):
     """회원가입"""
     permission_classes = [AllowAny]
     authentication_classes = []
-    
+
     def post(self, request):
         """회원가입 처리"""
+        username = request.data.get("username", "")
+        logger.info("[Signup] 회원가입 요청 수신 | username=%s", username)
+
         # 1. 입력 검증 (Serializer)
         serializer = UserBoothSignupSerializer(data=request.data)
         if not serializer.is_valid():
+            logger.warning(
+                "[Signup] 입력값 검증 실패 | username=%s | errors=%s",
+                username, serializer.errors
+            )
             return Response({
                 "message": "회원가입에 실패했습니다.",
                 "data": serializer.errors,
             }, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.debug("[Signup] 입력값 검증 통과 | username=%s", username)
 
         try:
             # 2. 회원가입 처리 (Service)
@@ -59,12 +71,19 @@ class SignupAPIView(APIView):
                 refresh_token=tokens['refresh_token']
             )
 
+            logger.info("[Signup] 회원가입 완료 | username=%s | user_id=%s", user.username, user.id)
             return response
 
         except ValueError as e:
+            logger.warning("[Signup] 회원가입 거부 | username=%s | reason=%s", username, str(e))
             return Response({
                 "message": str(e),
             }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception("[Signup] 예상치 못한 오류 발생 | username=%s", username)
+            return Response({
+                "message": "서버 오류가 발생했습니다.",
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CheckUsernameAPIView(APIView):

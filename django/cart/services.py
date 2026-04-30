@@ -47,16 +47,9 @@ def _validate_fee_quantity_policy(*, booth: Booth, quantity: int):
             status_code=400,
         )
 
-    if booth.seat_type == Booth.SEAT_TYPE.PT and quantity != 1:
+    if quantity < 1:
         raise CartError(
-            "테이블비는 1개만 담을 수 있습니다.",
-            "INVALID_FEE_QUANTITY",
-            status_code=400,
-        )
-
-    if booth.seat_type == Booth.SEAT_TYPE.PP and quantity < 1:
-        raise CartError(
-            "인당비 수량은 1 이상이어야 합니다.",
+            "이용료 수량은 1 이상이어야 합니다.",
             "INVALID_FEE_QUANTITY",
             status_code=400,
         )
