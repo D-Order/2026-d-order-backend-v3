@@ -57,7 +57,7 @@ public class StaffCallService {
     private CustomerStaffCallWebSocketHandler customerStaffCallWebSocketHandler;
 
     @Transactional
-    public StaffCallAcceptResponse accept(Long boothId, String accessToken, StaffCallAcceptRequest req) {
+    public StaffCallAcceptResponse accept(Long boothId, String accessToken, String sessionId, StaffCallAcceptRequest req) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type은 필수입니다.");
         }
@@ -82,7 +82,7 @@ public class StaffCallService {
             acceptedBy = "unknown";
         }
 
-        sc.accept(acceptedBy);
+        sc.accept(acceptedBy, sessionId);
 
         publishRedis(sc, "staff_call_accepted");
         try {
@@ -141,6 +141,22 @@ public class StaffCallService {
         out.put("message", "호출 수락을 취소했습니다.");
         out.put("data", StaffCallItemResponse.from(sc));
         return out;
+    }
+
+    @Transactional
+    public void releaseBySessionId(String sessionId) {
+        List<StaffCall> locked = staffCallRepository.findByLockedBySessionIdAndStatus(sessionId, StaffCallStatus.ACCEPTED);
+        for (StaffCall sc : locked) {
+            sc.unaccept();
+            publishRedis(sc, "staff_call_unaccepted");
+            try {
+                staffCallWebSocketHandler.broadcastSnapshot(sc.getBoothId(),
+                        staffCallQueryService.listForBooth(sc.getBoothId(), 50, 0));
+                customerStaffCallWebSocketHandler.broadcastStatus(sc);
+            } catch (Exception e) {
+                log.error("[staffcall release] broadcast 실패 sessionId={}", sessionId, e);
+            }
+        }
     }
 
     @Transactional

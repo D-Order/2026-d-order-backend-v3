@@ -64,6 +64,9 @@ public class StaffCall {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "locked_by_session_id", length = 36)
+    private String lockedBySessionId;
+
     @Version
     @Column(name = "version")
     private Long version;
@@ -84,10 +87,11 @@ public class StaffCall {
         this.updatedAt = this.createdAt;
     }
 
-    public void accept(String acceptedBy) {
+    public void accept(String acceptedBy, String sessionId) {
         this.status = StaffCallStatus.ACCEPTED;
         this.acceptedAt = LocalDateTime.now();
         this.acceptedBy = acceptedBy;
+        this.lockedBySessionId = sessionId;
         this.updatedAt = this.acceptedAt;
     }
 
@@ -95,6 +99,7 @@ public class StaffCall {
         this.status = StaffCallStatus.PENDING;
         this.acceptedAt = null;
         this.acceptedBy = null;
+        this.lockedBySessionId = null;
         this.updatedAt = LocalDateTime.now();
     }
 

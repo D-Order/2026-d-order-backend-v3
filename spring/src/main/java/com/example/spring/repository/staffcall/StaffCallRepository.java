@@ -22,10 +22,12 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             @Param("callType") String callType
     );
 
+    List<StaffCall> findByLockedBySessionIdAndStatus(String lockedBySessionId, StaffCallStatus status);
+
     @Query(value = """
             SELECT sc.id, sc.booth_id, sc.table_id, sc.cart_id, sc.table_usage_id, sc.table_num, sc.cart_price,
                    sc.call_type, sc.category,
-                   sc.status, sc.created_at, sc.updated_at, sc.accepted_at, sc.accepted_by, sc.completed_at, sc.version
+                   sc.status, sc.created_at, sc.updated_at, sc.accepted_at, sc.accepted_by, sc.completed_at, sc.version, sc.locked_by_session_id
             FROM staff_call sc
             WHERE sc.booth_id = :boothId
             AND sc.status IN ('PENDING', 'ACCEPTED')
