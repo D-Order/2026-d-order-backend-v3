@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import timedelta
 from django.test import override_settings, TransactionTestCase, TestCase
 from rest_framework.test import APITestCase, APIClient
@@ -1235,3 +1236,74 @@ class MergeActiveUsagesTestCase(TestCase):
         order.refresh_from_db()
         rep_cart = Cart.objects.get(table_usage=self._rep_usage(self.t1))
         self.assertEqual(order.cart, rep_cart)
+
+
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
+class TableConcurrentEnterTestCase(TransactionTestCase):
+    """테이블 입장 동시 호출 시 TableUsage 중복 생성 방지 테스트"""
+
+    def setUp(self):
+        client = APIClient()
+        client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
+        self.user = User.objects.get(username='testuser')
+        self.booth = Booth.objects.get(user=self.user)
+
+    def test_동시_입장_2개_요청시_TableUsage_하나만_생성(self):
+        """동시에 같은 테이블에 2개 입장 요청이 들어와도 TableUsage가 1개만 생성되어야 한다"""
+        results = []
+        errors = []
+        barrier = threading.Barrier(2)
+
+        def enter():
+            try:
+                barrier.wait()
+                usage = TableService.init_or_enter_table(self.booth, 1)
+                results.append(usage.id)
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=enter)
+        t2 = threading.Thread(target=enter)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        self.assertEqual(len(errors), 0, f"예외 발생: {errors}")
+        active_usages = TableUsage.objects.filter(
+            table__booth=self.booth,
+            table__table_num=1,
+            ended_at__isnull=True,
+        )
+        self.assertEqual(active_usages.count(), 1, "TableUsage가 1개여야 합니다")
+        self.assertEqual(results[0], results[1], "두 요청이 같은 TableUsage를 반환해야 합니다")
+
+    def test_동시_입장_5개_요청시_TableUsage_하나만_생성(self):
+        """5개 동시 요청에도 TableUsage가 1개만 생성되어야 한다"""
+        results = []
+        errors = []
+        n = 5
+        barrier = threading.Barrier(n)
+
+        def enter():
+            try:
+                barrier.wait()
+                usage = TableService.init_or_enter_table(self.booth, 2)
+                results.append(usage.id)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=enter) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(errors), 0, f"예외 발생: {errors}")
+        active_usages = TableUsage.objects.filter(
+            table__booth=self.booth,
+            table__table_num=2,
+            ended_at__isnull=True,
+        )
+        self.assertEqual(active_usages.count(), 1, "TableUsage가 1개여야 합니다")
+        self.assertEqual(len(set(results)), 1, "모든 요청이 같은 TableUsage를 반환해야 합니다")

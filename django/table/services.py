@@ -216,8 +216,9 @@ class TableService:
         if not table_num:
             raise ValidationError('테이블 번호는 필수입니다.')
 
-        # 테이블 조회
-        table = Table.objects.select_related('group__representative_table').filter(
+        # 테이블 조회 (행 잠금: 동시 입장 요청 시 TOCTOU 경합 방지)
+        # of=('self',): nullable outer join 대상 제외, Table 행만 잠금
+        table = Table.objects.select_related('group__representative_table').select_for_update(of=('self',)).filter(
             booth=booth, table_num=table_num
         ).first()
         if not table:
@@ -227,8 +228,13 @@ class TableService:
         if table.status == Table.Status.INACTIVE:
             raise ValidationError('해당 테이블은 현재 이용할 수 없습니다.')
 
-        # 병합된 테이블이면 대표 테이블 기준으로 처리
-        representative_table = table.group.representative_table if table.group else table
+        # 병합된 테이블이면 대표 테이블 기준으로 처리 (대표 테이블도 잠금)
+        if table.group:
+            representative_table = Table.objects.select_for_update().get(
+                pk=table.group.representative_table_id
+            )
+        else:
+            representative_table = table
 
         # 이미 사용 중인 경우 대표 테이블의 기존 세션 반환
         if table.status == Table.Status.IN_USE:
