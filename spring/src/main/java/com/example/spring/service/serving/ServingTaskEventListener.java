@@ -4,6 +4,7 @@ import com.example.spring.dto.redis.OrderCookedMessageDto;
 import com.example.spring.event.RedisMessageEvent;
 import com.example.spring.domain.staffcall.StaffCall;
 import com.example.spring.service.staffcall.StaffCallTableResetService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,12 @@ public class ServingTaskEventListener {
             try {
                 Long boothId = extractBoothId(channel);
                 String orderEvent = extractOrderEvent(channel);
+                log.info("[Redis 주문] 수신 boothId={}, 이벤트={}, channel={}, message={}",
+                        boothId, orderEvent, channel, truncateForLog(message, 4000));
+
                 OrderCookedMessageDto dto = objectMapper.readValue(message, OrderCookedMessageDto.class);
+                log.info("[Redis 주문] JSON 파싱 완료 tableNum={}, orderItemId={}",
+                        dto.getTableNum(), dto.getOrderItemId());
 
                 if ("cooked".equals(orderEvent)) {
                     if (dto.getOrderItemId() == null) {
@@ -73,19 +79,44 @@ public class ServingTaskEventListener {
 
                 if ("reset".equals(orderEvent)) {
                     if (dto.getTableNum() == null) {
-                        log.warn("[reset 처리 스킵] table_num/table_number 누락. channel={}, message={}", channel, message);
+                        log.warn("[테이블 초기화 처리 스킵] table_num/table_number 누락. channel={}, message={}",
+                                channel, truncateForLog(message, 2000));
                         return;
                     }
+                    log.info("[테이블 초기화] 서빙태스크 삭제 직전 boothId={}, tableNum={}", boothId, dto.getTableNum());
                     servingTaskService.removeTasksByTableNumber(boothId, dto.getTableNum(), "TABLE_RESET");
+                    log.info("[테이블 초기화] staff_call 취소 호출 직전 boothId={}, tableNum={}", boothId, dto.getTableNum());
                     List<StaffCall> voided = staffCallTableResetService.voidActiveCallsForTable(
                             boothId, dto.getTableNum());
+                    log.info("[테이블 초기화] 스냅샷·WS 호출 직전 boothId={}, staffCall취소건수={}",
+                            boothId, voided.size());
                     staffCallTableResetService.publishTableResetNotifications(boothId, voided);
+                    log.info("[테이블 초기화] 처리 완료 boothId={}, tableNum={}, staffCall취소건수={}",
+                            boothId, dto.getTableNum(), voided.size());
+                    return;
                 }
 
+                log.warn("[Redis 주문] 미처리 이벤트 이벤트={}, boothId={}, channel={}, message={}",
+                        orderEvent, boothId, channel, truncateForLog(message, 1000));
+
+            } catch (JsonProcessingException e) {
+                log.error("[Redis 주문] JSON 파싱 실패 channel={}, message={}",
+                        channel, truncateForLog(message, 4000), e);
             } catch (Exception e) {
-                log.error("[Redis 메시지 처리 실패] channel={}, message={}", channel, message, e);
+                log.error("[Redis 주문] 처리 실패 channel={}, message={}",
+                        channel, truncateForLog(message, 4000), e);
             }
         }
+    }
+
+    private static String truncateForLog(String s, int maxChars) {
+        if (s == null) {
+            return "null";
+        }
+        if (s.length() <= maxChars) {
+            return s;
+        }
+        return s.substring(0, maxChars) + "…(truncated " + s.length() + " chars)";
     }
 
     /**
