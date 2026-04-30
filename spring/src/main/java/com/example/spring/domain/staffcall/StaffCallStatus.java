@@ -4,5 +4,6 @@ public enum StaffCallStatus {
     PENDING,
     ACCEPTED,
     COMPLETED,
-    CANCELLED
+    CANCELLED,
+    VOIDED_BY_RESET,
 }

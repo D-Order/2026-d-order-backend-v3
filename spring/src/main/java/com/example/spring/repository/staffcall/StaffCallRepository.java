@@ -68,4 +68,12 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             String callType,
             Collection<StaffCallStatus> statuses
     );
+
+    @Query("SELECT sc FROM StaffCall sc WHERE sc.boothId = :boothId AND sc.tableNum = :tableNum "
+            + "AND sc.status IN :statuses")
+    List<StaffCall> findByBoothIdAndTableNumAndStatusIn(
+            @Param("boothId") Long boothId,
+            @Param("tableNum") Integer tableNum,
+            @Param("statuses") Collection<StaffCallStatus> statuses
+    );
 }

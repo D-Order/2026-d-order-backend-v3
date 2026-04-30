@@ -46,7 +46,7 @@ public class StaffCall {
     private StaffCallCategory category;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private StaffCallStatus status;
 
     @Column(name = "created_at", nullable = false)
@@ -102,5 +102,14 @@ public class StaffCall {
         this.status = StaffCallStatus.COMPLETED;
         this.completedAt = LocalDateTime.now();
         this.updatedAt = this.completedAt;
+    }
+
+    /** Django 테이블 초기화로 세션이 끊긴 경우 — 활성 호출만 목록에서 제외. */
+    public void cancelDueToTableReset() {
+        if (this.status != StaffCallStatus.PENDING && this.status != StaffCallStatus.ACCEPTED) {
+            return;
+        }
+        this.status = StaffCallStatus.VOIDED_BY_RESET;
+        this.updatedAt = LocalDateTime.now();
     }
 }
