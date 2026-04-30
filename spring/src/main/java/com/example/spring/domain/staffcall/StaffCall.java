@@ -104,9 +104,9 @@ public class StaffCall {
         this.updatedAt = this.completedAt;
     }
 
-    /** Django 테이블 초기화로 세션이 끊긴 경우 — 활성 호출만 목록에서 제외. */
+    /** Django 테이블 초기화로 해당 테이블 호출 이력을 목록에서 제외(PENDING/ACCEPTED/COMPLETED 등 전부). */
     public void cancelDueToTableReset() {
-        if (this.status != StaffCallStatus.PENDING && this.status != StaffCallStatus.ACCEPTED) {
+        if (this.status == StaffCallStatus.VOIDED_BY_RESET) {
             return;
         }
         this.status = StaffCallStatus.VOIDED_BY_RESET;
