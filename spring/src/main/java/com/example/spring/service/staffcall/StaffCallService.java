@@ -119,6 +119,14 @@ public class StaffCallService {
             throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
         }
 
+        // 멱등성: 이미 PENDING이면 취소된 상태로 간주하고 그대로 성공 처리
+        if (sc.getStatus() == StaffCallStatus.PENDING) {
+            Map<String, Object> out = new HashMap<>();
+            out.put("message", "이미 호출 수락이 취소된 상태입니다.");
+            out.put("data", StaffCallItemResponse.from(sc));
+            return out;
+        }
+
         if (sc.getStatus() != StaffCallStatus.ACCEPTED) {
             throw new StaffCallConflictException("수락된 호출만 취소할 수 있습니다.");
         }
