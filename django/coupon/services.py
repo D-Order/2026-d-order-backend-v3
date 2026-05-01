@@ -115,7 +115,14 @@ def apply_coupon_code(*, table_usage_id: int, coupon_code_str: str):
     cart = get_object_or_404(Cart.objects.select_for_update(), table_usage=table_usage)
     _ensure_cart_active(cart)
 
-    code = get_object_or_404(CouponCode.objects.select_for_update(), code=coupon_code_str)
+    try:
+        code = CouponCode.objects.select_for_update().get(code=coupon_code_str)
+    except CouponCode.DoesNotExist:
+        raise CouponError(
+            "존재하지 않는 쿠폰 코드입니다.",
+            "COUPON_CODE_NOT_FOUND",
+            status_code=404,
+        )
 
     booth_id = table_usage.table.booth_id
     if code.coupon.booth_id != booth_id:
