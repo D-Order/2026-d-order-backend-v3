@@ -760,7 +760,12 @@ def _finalize_payment_core(cart: Cart):
     
     table_usage = TableUsage.objects.select_for_update().get(pk=cart.table_usage_id)
     table_usage.accumulated_amount += order.order_price
-    table_usage.save(update_fields=["accumulated_amount"])
+    update_fields = ["accumulated_amount"]
+    
+    if table_usage.started_at is None:
+        table_usage.started_at = timezone.now()
+        update_fields.append("started_at")
+    table_usage.save(update_fields=update_fields)
 
     return order
 
@@ -782,7 +787,16 @@ def confirm_payment_and_mark_ordered(*, table_usage_id: int) -> Cart:
     cart.save(update_fields=["status", "pending_expires_at"])
 
     final_table_usage_id = cart.table_usage_id
-    booth_id = cart.table_usage.table.booth_id
+    
+    # 주문 확정 시 Table 캐러셀 화면으로 알리기 위해서 웹소켓 전송이 필요합니다!
+    table = cart.table_usage.table
+    booth_id = table.booth_id
+    table_num = table.table_num
+
+    from table.services import OrderBroadcastService
+    OrderBroadcastService.broadcast_order_update(
+        booth_id, table_num, final_table_usage_id
+    )
 
     from .services_ws import broadcast_cart_event
     from order.cache import update_today_revenue
