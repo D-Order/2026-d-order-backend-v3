@@ -69,7 +69,7 @@ class BoothTableUsageResetAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class BoothNameAPIView(APIView):
+class BoothNamePublicAPIView(APIView):
     """부스 이름 조회용"""
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -91,6 +91,7 @@ class BoothNameAPIView(APIView):
                 "booth_name" : booth.name,
             }
         }, status=status.HTTP_200_OK)
+        
 class BoothNameAPIView(APIView):
     """부스 이름 조회용"""
     permission_classes = [IsAuthenticated]
