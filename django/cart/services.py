@@ -548,6 +548,33 @@ def enter_payment_info(*, table_usage_id: int):
 
     subtotal = recalc_cart_price(cart)
     discount_total = 0
+
+    from coupon.models import CartCouponApply
+
+    applied = (
+        CartCouponApply.objects
+        .filter(cart=cart, round=cart.round)
+        .select_related("coupon_code", "coupon_code__coupon")
+        .first()
+    )
+
+    if applied:
+        applied_code = applied.coupon_code
+        coupon = applied_code.coupon
+
+        if applied_code.used_at is not None:
+            raise CartError(
+                "이미 사용된 쿠폰 코드입니다.",
+                "COUPON_CODE_USED",
+                status_code=409,
+            )
+
+        discount_total = _calc_discount(
+            subtotal,
+            coupon.discount_type,
+            coupon.discount_value,
+        )
+
     total = subtotal - discount_total
 
     cart.status = Cart.Status.PENDING
@@ -656,38 +683,34 @@ def _finalize_payment_core(cart: Cart):
     discount_total = 0
     applied_coupon = None
 
-    try:
-        from coupon.models import CartCouponApply
+    from coupon.models import CartCouponApply
 
-        applied = (
-            CartCouponApply.objects.select_for_update()
-            .filter(cart=cart, round=cart.round)
-            .select_related("coupon_code", "coupon_code__coupon")
-            .first()
-        )
-        if applied:
-            applied_code = applied.coupon_code
-            applied_coupon = applied_code.coupon
+    applied = (
+        CartCouponApply.objects.select_for_update()
+        .filter(cart=cart, round=cart.round)
+        .select_related("coupon_code", "coupon_code__coupon")
+        .first()
+    )
 
-            if applied_code.used_at is not None:
-                raise CartError(
-                    "이미 사용된 쿠폰 코드입니다.",
-                    "COUPON_CODE_USED",
-                    status_code=409,
-                )
+    if applied:
+        applied_code = applied.coupon_code
+        applied_coupon = applied_code.coupon
 
-            discount_total = _calc_discount(
-                subtotal,
-                applied_coupon.discount_type,
-                applied_coupon.discount_value,
+        if applied_code.used_at is not None:
+            raise CartError(
+                "이미 사용된 쿠폰 코드입니다.",
+                "COUPON_CODE_USED",
+                status_code=409,
             )
 
-            applied_code.used_at = timezone.now()
-            applied_code.save(update_fields=["used_at"])
-    except CartError:
-        raise
-    except Exception:
-        pass
+        discount_total = _calc_discount(
+            subtotal,
+            applied_coupon.discount_type,
+            applied_coupon.discount_value,
+        )
+
+        applied_code.used_at = timezone.now()
+        applied_code.save(update_fields=["used_at"])
 
     order_price = subtotal - discount_total
 
