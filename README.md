@@ -26,7 +26,7 @@ D-Order 백엔드 레포입니다.
 ├── django/
 │   ├── manage.py                 
 │   ├── requirements.txt          # Python 의존성 파일들
-│   ├── apps/
+│   ├── apps/ 
 │   └── project/                  # Django 프로젝트 폴더
 └── Spring/                       # Spring
 ```
