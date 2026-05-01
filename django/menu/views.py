@@ -303,9 +303,9 @@ class UserMenuListAPIView(APIView):
     """
     authentication_classes = []  # JWT 인증 비활성화
     permission_classes = [AllowAny]  # 로그인 없이 접근 가능
-    def get(self, request, booth_id):
+    def get(self, request, booth_uuid):
         table_num = request.GET.get('table_num')
-        booth = get_object_or_404(Booth, pk=booth_id)
+        booth = get_object_or_404(Booth, public_id=booth_uuid)
         table_info = None
         if table_num is not None:
             try:

@@ -585,7 +585,7 @@ class TableEnterTestCase(APITestCase):
         self.client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
         self.user = User.objects.get(username='testuser')
         self.booth = Booth.objects.get(user=self.user)
-        self.enter_url = f'/api/v3/django/booth/{self.booth.pk}/table/'
+        self.enter_url = f'/api/v3/django/booth/{self.booth.public_id}/table/'
         self.client.cookies.clear()
 
     def test_enter_table_success(self):
@@ -634,7 +634,7 @@ class TableEnterTestCase(APITestCase):
     def test_enter_table_invalid_booth(self):
         """존재하지 않는 부스 입장 시 404"""
         with suppress_request_warnings():
-            response = self.client.post('/api/v3/django/booth/9999/table/', {'table_num': 1}, format='json')
+            response = self.client.post('/api/v3/django/booth/00000000-0000-0000-0000-000000000000/table/', {'table_num': 1}, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 

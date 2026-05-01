@@ -139,7 +139,7 @@ class TableEnterAPIView(views.APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
     
-    def post(self, request, booth_id):
+    def post(self, request, booth_uuid):
         """
         테이블 입장 처리
 
@@ -153,7 +153,7 @@ class TableEnterAPIView(views.APIView):
         """
         # 부스 조회
         try:
-            booth = Booth.objects.get(pk=booth_id)
+            booth = Booth.objects.get(public_id=booth_uuid)
         except Booth.DoesNotExist:
             return Response({
                 "message": "해당 부스를 찾을 수 없습니다."
