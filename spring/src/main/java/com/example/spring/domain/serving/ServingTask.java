@@ -24,6 +24,9 @@ public class ServingTask {
     @Column(name = "table_number")
     private Integer tableNumber;
 
+    @Column(name = "menu_id")
+    private Long menuId;
+
     @Column(name = "menu_name")
     private String menuName;
 
@@ -53,10 +56,11 @@ public class ServingTask {
     private String key;
 
     @Builder
-    public ServingTask(Long boothId, Long orderItemId, Integer tableNumber, String menuName, Integer quantity, String key) {
+    public ServingTask(Long boothId, Long orderItemId, Integer tableNumber, Long menuId, String menuName, Integer quantity, String key) {
         this.boothId = boothId;
         this.orderItemId = orderItemId;
         this.tableNumber = tableNumber;
+        this.menuId = menuId;
         this.menuName = menuName;
         this.quantity = quantity;
         this.status = ServingStatus.SERVE_REQUESTED;

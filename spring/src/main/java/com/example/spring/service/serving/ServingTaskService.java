@@ -222,7 +222,7 @@ public class ServingTaskService {
     }
 
     @Transactional
-    public void createNewServingTask(Long boothId, Long orderItemId, Integer tableNumber, String menuName, Integer quantity, String key) {
+    public void createNewServingTask(Long boothId, Long orderItemId, Integer tableNumber, Long menuId, String menuName, Integer quantity, String key) {
         boolean alreadyExists = servingTaskRepository
                 .findFirstByBoothIdAndOrderItemIdAndStatusIn(
                         boothId,
@@ -240,6 +240,7 @@ public class ServingTaskService {
                 .boothId(boothId)
                 .orderItemId(orderItemId)
                 .tableNumber(tableNumber)
+                .menuId(menuId)
                 .menuName(menuName)
                 .quantity(quantity)
                 .key(key)

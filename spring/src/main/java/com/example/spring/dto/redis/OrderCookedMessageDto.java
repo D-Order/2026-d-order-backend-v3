@@ -18,9 +18,13 @@ public class OrderCookedMessageDto {
     @JsonAlias({"table_num", "table_number"})
     private Integer tableNum;
 
+    @JsonProperty("menu_id")
+    private Long menuId;
+
     @JsonProperty("menu_name")
     private String menuName;
 
+    @JsonProperty("quantity")
     private Integer quantity;
 
     private String status; // "cooked"

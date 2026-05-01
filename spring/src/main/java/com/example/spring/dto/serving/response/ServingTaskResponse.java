@@ -13,6 +13,9 @@ public class ServingTaskResponse {
     private Long taskId;
     private Long orderItemId;
     private Integer tableNumber;
+    private Long menuId;
+    private String menuName;
+    private Integer quantity;
     private String status;
     // 🌟 catchedBy 필드 삭제됨
     private LocalDateTime requestedAt;
@@ -22,6 +25,9 @@ public class ServingTaskResponse {
                 .taskId(task.getId())
                 .orderItemId(task.getOrderItemId())
                 .tableNumber(task.getTableNumber())
+                .menuId(task.getMenuId())
+                .menuName(task.getMenuName())
+                .quantity(task.getQuantity())
                 .status(task.getStatus() != null ? task.getStatus().name() : null)
                 // 🌟 catchedBy 매핑 삭제됨
                 .requestedAt(task.getRequestedAt())
