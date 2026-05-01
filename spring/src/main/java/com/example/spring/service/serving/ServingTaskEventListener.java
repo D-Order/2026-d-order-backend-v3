@@ -39,10 +39,17 @@ public class ServingTaskEventListener {
                     if (dto.getTableNum() == null) {
                         log.warn("[cooked 처리 경고] table_num/table_number 누락. 생성은 진행하지만 reset-by-table 정리에 실패할 수 있습니다. channel={}, message={}", channel, message);
                     }
+                    if (dto.getMenuName() == null || dto.getMenuName().isBlank()) {
+                        log.warn("[cooked 처리 경고] menu_name 누락. 프론트 표시 데이터가 비어있을 수 있습니다. channel={}, message={}", channel, message);
+                    }
+                    if (dto.getQuantity() == null) {
+                        log.warn("[cooked 처리 경고] quantity 누락. 프론트 표시 데이터가 비어있을 수 있습니다. channel={}, message={}", channel, message);
+                    }
                     servingTaskService.createNewServingTask(
                             boothId,
                             dto.getOrderItemId(),
                             dto.getTableNum(),
+                            dto.getMenuId(),
                             dto.getMenuName(),
                             dto.getQuantity(),
                             UUID.randomUUID().toString()
