@@ -6,7 +6,7 @@ router = DefaultRouter()
 router.register(r'tables', TableManagementViewSet, basename='tables')
 
 urlpatterns = [
-    path("<int:booth_id>/table/", TableEnterAPIView.as_view(), name="table-enter"),
+    path("<uuid:booth_uuid>/table/", TableEnterAPIView.as_view(), name="table-enter"),
 ]
 
 urlpatterns += router.urls
