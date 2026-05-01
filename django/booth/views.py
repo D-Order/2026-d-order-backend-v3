@@ -91,3 +91,17 @@ class BoothNameAPIView(APIView):
                 "booth_name" : booth.name,
             }
         }, status=status.HTTP_200_OK)
+class BoothNameAPIView(APIView):
+    """부스 이름 조회용"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """QR URL 반환"""
+        booth = request.user.booth
+        
+        return Response({
+            "message": "부스 이름을 조회하였습니다.",
+            "data" : {
+                "booth_name" : booth.name,
+            }
+        }, status=status.HTTP_200_OK)
