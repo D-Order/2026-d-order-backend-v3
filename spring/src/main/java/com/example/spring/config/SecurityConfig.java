@@ -98,10 +98,7 @@ public class SecurityConfig {
                 "http://dev.dorder-api.shop",
                 "https://admin.dorder-api.shop",
                 "https://customer.dorder-api.shop",
-                "https://server.dorder-api.shop",
-                "https://d-order-customer.netlify.app",
-                "https://d-order-admin.netlify.app",
-                "https://d-order-server.netlify.app"
+                "https://server.dorder-api.shop"
         ));
 
         // 허용할 HTTP 메서드
