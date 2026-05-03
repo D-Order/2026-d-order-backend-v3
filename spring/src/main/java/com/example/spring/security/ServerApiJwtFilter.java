@@ -79,11 +79,11 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
     }
 
     private boolean isProtectedPath(String path) {
-        return path.startsWith("/server/") || path.startsWith("/serving/");
+        return path.contains("/server/") || path.contains("/serving/");
     }
 
     private boolean isStaffCallPublicPath(String path) {
-        return "/server/staffcall/request".equals(path)
-                || "/server/staffcall/delete".equals(path);
+        return path.endsWith("/server/staffcall/request")
+                || path.endsWith("/server/staffcall/delete");
     }
 }
