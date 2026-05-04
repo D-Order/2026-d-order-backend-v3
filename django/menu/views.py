@@ -345,7 +345,9 @@ class UserMenuListAPIView(APIView):
         for setmenu in set_menus:
             origin_price = sum([item.menu.price * item.quantity for item in setmenu.items.all()])
             discount_rate = round((origin_price - setmenu.price) / origin_price * 100, 1) if origin_price > 0 else 0.0
-            is_soldout = any(item.menu.stock == 0 for item in setmenu.items.all())
+            items = list(setmenu.items.all())
+            is_soldout = any(item.menu.stock == 0 for item in items)
+            min_stock = min((item.menu.stock // item.quantity for item in items), default=0)
             set_data.append({
                 "id": setmenu.pk,
                 "name": setmenu.name,
@@ -354,6 +356,7 @@ class UserMenuListAPIView(APIView):
                 "discount_rate": discount_rate,
                 "description": setmenu.description or "",
                 "image": setmenu.image.url if setmenu.image else None,
+                "stock": min_stock,
                 "is_soldout": is_soldout
             })
         set_data.sort(key=lambda x: x['price'], reverse=True)
