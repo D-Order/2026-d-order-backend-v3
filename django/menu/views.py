@@ -336,6 +336,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(fee_menu.price),
                 "description": fee_menu.description or "",
                 "image": fee_menu.image.url if fee_menu.image else None,
+                "stock": fee_menu.stock,
                 "is_soldout": fee_menu.stock == 0
             }]
         # SET
@@ -344,7 +345,9 @@ class UserMenuListAPIView(APIView):
         for setmenu in set_menus:
             origin_price = sum([item.menu.price * item.quantity for item in setmenu.items.all()])
             discount_rate = round((origin_price - setmenu.price) / origin_price * 100, 1) if origin_price > 0 else 0.0
-            is_soldout = any(item.menu.stock == 0 for item in setmenu.items.all())
+            items = list(setmenu.items.all())
+            is_soldout = any(item.menu.stock == 0 for item in items)
+            min_stock = min((item.menu.stock // item.quantity for item in items), default=0)
             set_data.append({
                 "id": setmenu.pk,
                 "name": setmenu.name,
@@ -353,6 +356,7 @@ class UserMenuListAPIView(APIView):
                 "discount_rate": discount_rate,
                 "description": setmenu.description or "",
                 "image": setmenu.image.url if setmenu.image else None,
+                "stock": min_stock,
                 "is_soldout": is_soldout
             })
         set_data.sort(key=lambda x: x['price'], reverse=True)
@@ -366,6 +370,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(menu.price),
                 "description": menu.description or "",
                 "image": menu.image.url if menu.image else None,
+                "stock": menu.stock,
                 "is_soldout": menu.stock == 0
             })
         # DRINK
@@ -378,6 +383,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(drink.price),
                 "description": drink.description or "",
                 "image": drink.image.url if drink.image else None,
+                "stock": drink.stock,
                 "is_soldout": drink.stock == 0
             })
         resp = {
