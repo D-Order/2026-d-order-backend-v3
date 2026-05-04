@@ -336,6 +336,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(fee_menu.price),
                 "description": fee_menu.description or "",
                 "image": fee_menu.image.url if fee_menu.image else None,
+                "stock": fee_menu.stock,
                 "is_soldout": fee_menu.stock == 0
             }]
         # SET
@@ -366,6 +367,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(menu.price),
                 "description": menu.description or "",
                 "image": menu.image.url if menu.image else None,
+                "stock": menu.stock,
                 "is_soldout": menu.stock == 0
             })
         # DRINK
@@ -378,6 +380,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(drink.price),
                 "description": drink.description or "",
                 "image": drink.image.url if drink.image else None,
+                "stock": drink.stock,
                 "is_soldout": drink.stock == 0
             })
         resp = {
