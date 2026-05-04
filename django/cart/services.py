@@ -595,7 +595,7 @@ def enter_payment_info(*, table_usage_id: int):
 
     return cart, payment
 
-@@transaction.atomic
+@transaction.atomic
 def cancel_payment_and_restore_cart(*, table_usage_id: int) -> Cart:
     cart = get_object_or_404(
         Cart.objects.select_for_update(),
