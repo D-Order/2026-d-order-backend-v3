@@ -6,7 +6,7 @@ from core.mixins import KoreanAsyncJsonMixin
 from table.models import TableUsage
 from .models import Cart, CartItem
 from .services import *
-from .services_ws import *
+from .services_ws import build_cart_snapshot_data
 
 
 class CustomerCartConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):

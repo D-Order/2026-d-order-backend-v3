@@ -128,9 +128,16 @@ def apply_coupon_code(*, table_usage_id: int, coupon_code_str: str):
     if code.coupon.booth_id != booth_id:
         raise CouponError("해당 부스에서 사용할 수 없는 쿠폰입니다.", "COUPON_BOOTH_MISMATCH", status_code=400)
 
+    # 결제 확정으로 이미 소진된 코드
     if code.used_at is not None:
         raise CouponError("이미 사용된 쿠폰 코드입니다.", "COUPON_CODE_USED", status_code=400)
 
+    # 다른 cart에서 이미 선점 중인 코드 (결제 전이라도 차단)
+    already_applied = CartCouponApply.objects.filter(coupon_code=code).exclude(cart=cart).exists()
+    if already_applied:
+        raise CouponError("이미 다른 테이블에서 사용 중인 쿠폰 코드입니다.", "COUPON_CODE_IN_USE", status_code=409)
+
+    # 현재 cart에 이미 다른 쿠폰이 적용되어 있는 경우
     if CartCouponApply.objects.filter(cart=cart, round=cart.round).exists():
         raise CouponError("이미 쿠폰이 적용되어 있습니다.", "COUPON_ALREADY_APPLIED", status_code=409)
 
