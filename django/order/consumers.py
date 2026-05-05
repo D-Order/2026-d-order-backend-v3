@@ -124,14 +124,16 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 logger.warning(f"✅ [Order WS] 주문 조회 성공 - order_id={order_id}")
                 serialized = await self._serialize_order(order)
                 total_sales = await self._get_total_sales()
-                await self.send_json({
-                    "type": "ADMIN_NEW_ORDER",
-                    "timestamp": timezone.localtime().isoformat(),
-                    "data": {
-                        "total_sales": total_sales,
-                        "orders": [serialized],
-                    },
-                })
+                # FEE only 주문은 대시보드에 표시하지 않음
+                if serialized["items"]:
+                    await self.send_json({
+                        "type": "ADMIN_NEW_ORDER",
+                        "timestamp": timezone.localtime().isoformat(),
+                        "data": {
+                            "total_sales": total_sales,
+                            "orders": [serialized],
+                        },
+                    })
                 await self.send_menu_aggregation()
                 return
             else:
