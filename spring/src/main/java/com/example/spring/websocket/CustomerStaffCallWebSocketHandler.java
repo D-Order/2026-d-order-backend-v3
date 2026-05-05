@@ -16,6 +16,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -59,6 +60,10 @@ public class CustomerStaffCallWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         JsonNode root = objectMapper.readTree(message.getPayload());
         String type = root.path("type").asText("");
+        if ("PING".equalsIgnoreCase(type)) {
+            sendHeartbeatPong(session);
+            return;
+        }
         if (!"SUBSCRIBE".equalsIgnoreCase(type)) {
             return;
         }
@@ -191,6 +196,16 @@ public class CustomerStaffCallWebSocketHandler extends TextWebSocketHandler {
 
     private String getSubscribeToken(Long staffCallId) {
         return redisTemplate.opsForValue().get(REDIS_SUBSCRIBE_TOKEN_KEY_PREFIX + staffCallId);
+    }
+
+    /** Django cart WS와 동일한 JSON 하트비트 응답 (연결 유지·유휴 끊김 완화). */
+    private void sendHeartbeatPong(WebSocketSession session) throws IOException {
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "PONG");
+        body.put("timestamp", OffsetDateTime.now().toString());
+        body.put("message", "heartbeat");
+        body.put("data", null);
+        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(body)));
     }
 }
 

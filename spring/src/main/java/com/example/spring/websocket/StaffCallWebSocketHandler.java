@@ -15,6 +15,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.io.IOException;
+import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -84,6 +85,10 @@ public class StaffCallWebSocketHandler extends TextWebSocketHandler {
         }
         JsonNode root = objectMapper.readTree(message.getPayload());
         String type = root.path("type").asText("");
+        if ("PING".equalsIgnoreCase(type)) {
+            sendHeartbeatPong(session);
+            return;
+        }
         if (!"LIST".equalsIgnoreCase(type)) {
             return;
         }
@@ -127,5 +132,15 @@ public class StaffCallWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("[staffcall ws] broadcast 실패", e);
         }
+    }
+
+    /** Django cart WS와 동일한 JSON 하트비트 응답 (연결 유지·유휴 끊김 완화). */
+    private void sendHeartbeatPong(WebSocketSession session) throws IOException {
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "PONG");
+        body.put("timestamp", OffsetDateTime.now().toString());
+        body.put("message", "heartbeat");
+        body.put("data", null);
+        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(body)));
     }
 }
