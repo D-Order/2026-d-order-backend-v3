@@ -374,14 +374,20 @@ async def test_table_reset_websocket_broadcast(settings):
         order_status="PAID",
         table_usage=table_usage1,
     )
-    
+    await sync_to_async(OrderItem.objects.create)(
+        order=order1, menu=menu, quantity=2, fixed_price=5000, status="COOKING",
+    )
+
     # 테이블 2의 주문
     order2 = await sync_to_async(Order.objects.create)(
         order_price=10000,
         order_status="PAID",
         table_usage=table_usage2,
     )
-    
+    await sync_to_async(OrderItem.objects.create)(
+        order=order2, menu=menu, quantity=2, fixed_price=5000, status="COOKING",
+    )
+
     # WebSocket 연결
     communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
@@ -456,17 +462,26 @@ async def test_table_merge_websocket_broadcast(settings):
         order_status="PAID",
         table_usage=table_usage1,
     )
+    await sync_to_async(OrderItem.objects.create)(
+        order=order1, menu=menu, quantity=2, fixed_price=5000, status="COOKING",
+    )
     order2 = await sync_to_async(Order.objects.create)(
         order_price=10000,
         order_status="PAID",
         table_usage=table_usage2,
+    )
+    await sync_to_async(OrderItem.objects.create)(
+        order=order2, menu=menu, quantity=2, fixed_price=5000, status="COOKING",
     )
     order3 = await sync_to_async(Order.objects.create)(
         order_price=10000,
         order_status="PAID",
         table_usage=table_usage3,
     )
-    
+    await sync_to_async(OrderItem.objects.create)(
+        order=order3, menu=menu, quantity=2, fixed_price=5000, status="COOKING",
+    )
+
     # WebSocket 연결
     communicator = WebsocketCommunicator(application, "/ws/django/booth/orders/management/")
     communicator.scope["user"] = user
