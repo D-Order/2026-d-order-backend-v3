@@ -231,11 +231,17 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         """해당 부스의 PAID 상태 주문을 오래된 순으로 조회 (종료된 테이블 제외)"""
         def _query():
             logger.warning(f"🔍 [Order WS] DB 조회 - booth_id={self.booth_id}")
+            from django.db.models import Q
             qs = Order.objects.filter(
                 order_status="PAID",
                 table_usage__table__booth_id=self.booth_id,
-                table_usage__ended_at__isnull=True,  # ← 테이블 사용 중인 것만 (종료된 테이블 제외)
-            ).select_related("table_usage__table").order_by("created_at")
+                table_usage__ended_at__isnull=True,
+                # FEE 외 아이템이 하나라도 있는 주문만 (FEE only 주문 제외)
+                items__parent__isnull=True,
+            ).filter(
+                Q(items__setmenu__isnull=False) |
+                Q(items__menu__category__in=["MENU", "DRINK"])
+            ).distinct().select_related("table_usage__table").order_by("created_at")
             count = qs.count()
             logger.warning(f"🔍 [Order WS] DB 결과: {count}개 주문")
             return list(qs)
