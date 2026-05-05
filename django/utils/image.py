@@ -8,7 +8,7 @@ from rest_framework.exceptions import APIException
 
 
 # 이미지 설정
-MAX_IMAGE_SIZE_MB = 5  # 업로드 최대 용량 (MB)
+MAX_IMAGE_SIZE_MB = 10  # 업로드 최대 용량 (MB)
 MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
 COMPRESS_QUALITY = 85  # 압축 품질 (1-100)
 MAX_DIMENSION = 1920  # 최대 가로/세로 크기
