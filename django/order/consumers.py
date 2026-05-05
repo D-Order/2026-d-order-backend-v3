@@ -409,13 +409,13 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 if item.setmenu_id:
                     # 세트메뉴 → 자식 OrderItem 개별 직렬화
                     set_menu_name = item.setmenu.name
-                    set_menu_image = item.setmenu.image.url if item.setmenu and item.setmenu.image else None
                     for child in item.children.all():
                         child_menu_name = child.menu.name if child.menu else "알 수 없음"
+                        child_image = child.menu.image.url if child.menu and child.menu.image else None
                         items.append({
                             "order_item_id": child.id,
                             "menu_name": child_menu_name,
-                            "image": set_menu_image,
+                            "image": child_image,
                             "quantity": child.quantity,
                             "fixed_price": item.fixed_price,
                             "item_total_price": item.fixed_price * item.quantity,
