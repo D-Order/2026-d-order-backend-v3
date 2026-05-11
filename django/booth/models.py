@@ -1,16 +1,20 @@
+import uuid
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 # For QR
 import qrcode
+from django.conf import settings
 from io import BytesIO
 from django.core.files.base import ContentFile
 
 # Create your models here.
 class Booth(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True, related_name='booth') # user를 booth의 pk로 사용
-    
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+
     # 이름
     name = models.CharField(max_length=20)
 
@@ -20,7 +24,7 @@ class Booth(models.Model):
     bank = models.CharField(max_length=50)
 
     # 테이블 정보
-    table_max_cnt = models.IntegerField()
+    table_max_cnt = models.IntegerField(validators=[MinValueValidator(0), MaxValueValidator(200)])
     table_limit_hours = models.DecimalField(max_digits=4, decimal_places=2)
 
     # 요금 정보
@@ -52,7 +56,8 @@ class Booth(models.Model):
         if self.qr_image:
             self.qr_image.delete(save=False)
 
-        qr_data = f"https://frontend-url.com/booth/{self.pk}/"  #TODO : 부스 고유 URL로 변경
+        
+        qr_data = f"https://{settings.CUSTOMER_FRONT_BASE_URL}/?id={self.public_id}"
         qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(qr_data)
         qr.make(fit=True)
@@ -60,7 +65,7 @@ class Booth(models.Model):
         img = qr.make_image(fill='black', back_color='white')
         buffer = BytesIO()
         img.save(buffer, format='PNG')
-        file_name = f'booth_{self.pk}_qr.png'
+        file_name = f'booth_{self.public_id}_qr.png'
         self.qr_image.save(file_name, ContentFile(buffer.getvalue()), save=False)
 
     # 최초 생성 시 이미지가 없으면 자동 생성

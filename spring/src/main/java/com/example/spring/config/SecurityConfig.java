@@ -79,7 +79,6 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // 허용할 Origin (로컬 개발 환경)
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:3000",
                 "http://localhost:5173",
@@ -91,6 +90,10 @@ public class SecurityConfig {
                 "https://127.0.0.1:5173",
                 "http://127.0.0.1:5174",
                 "https://127.0.0.1:5174",
+                "http://localhost:5175",
+                "https://localhost:5175",
+                "http://127.0.0.1:5175",
+                "https://127.0.0.1:5175",
                 "https://dev.dorder-api.shop",
                 "http://dev.dorder-api.shop",
                 "https://admin.dorder-api.shop",

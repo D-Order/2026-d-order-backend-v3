@@ -15,13 +15,23 @@ public class ServingTask {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * Django가 관리하는 orderitem 테이블은
-     * Spring에서 JPA 연관관계로 직접 물지 않고,
-     * FK 값(ID)만 저장합니다.
-     */
+    @Column(name = "booth_id", nullable = false)
+    private Long boothId;
+
     @Column(name = "orderitem", nullable = false)
     private Long orderItemId;
+
+    @Column(name = "table_number")
+    private Integer tableNumber;
+
+    @Column(name = "menu_id")
+    private Long menuId;
+
+    @Column(name = "menu_name")
+    private String menuName;
+
+    @Column(name = "quantity")
+    private Integer quantity;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")
@@ -42,24 +52,25 @@ public class ServingTask {
     @Column(name = "served_at")
     private LocalDateTime servedAt;
 
-    @Column(name = "catched_by")
-    private String catchedBy;
-
     @Column(name = "key", nullable = false, length = 255)
     private String key;
 
     @Builder
-    public ServingTask(Long orderItemId, String key) {
+    public ServingTask(Long boothId, Long orderItemId, Integer tableNumber, Long menuId, String menuName, Integer quantity, String key) {
+        this.boothId = boothId;
         this.orderItemId = orderItemId;
+        this.tableNumber = tableNumber;
+        this.menuId = menuId;
+        this.menuName = menuName;
+        this.quantity = quantity;
         this.status = ServingStatus.SERVE_REQUESTED;
         this.key = key;
         this.createdAt = LocalDateTime.now();
         this.requestedAt = LocalDateTime.now();
     }
 
-    public void acceptServing(String catchedBy) {
+    public void acceptServing() {
         this.status = ServingStatus.SERVING;
-        this.catchedBy = catchedBy;
         this.catchedAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -72,7 +83,6 @@ public class ServingTask {
 
     public void cancelServing() {
         this.status = ServingStatus.SERVE_REQUESTED;
-        this.catchedBy = null;
         this.catchedAt = null;
         this.updatedAt = LocalDateTime.now();
     }

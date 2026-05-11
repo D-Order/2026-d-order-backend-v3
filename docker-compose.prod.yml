@@ -45,6 +45,31 @@ services:
       - d-order-network-prod
     restart: unless-stopped
 
+  postgres:
+    image: postgres:15-alpine
+    container_name: d-order-postgres-prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: -U postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+      SPRING_DB_USER: ${SPRING_DB_USER}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./db-scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - d-order-network-prod
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     container_name: d-order-redis-prod
@@ -77,7 +102,7 @@ services:
       DB_NAME: ${POSTGRES_DB}
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -90,9 +115,12 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+      CUSTOMER_FRONT_BASE_URL: ${CUSTOMER_FRONT_BASE_URL}
     expose:
       - '8000'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -124,7 +152,7 @@ services:
       DB_NAME: ${POSTGRES_DB}
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -137,9 +165,12 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+      CUSTOMER_FRONT_BASE_URL: ${CUSTOMER_FRONT_BASE_URL}
     expose:
       - '8000'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
@@ -165,7 +196,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       SPRING_DB_USER: ${SPRING_DB_USER}
       SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      DB_HOST: postgres
       SECRET_KEY: ${SECRET_KEY}
       DJANGO_API_URL: ${DJANGO_API_URL}
       REDIS_HOST: redis
@@ -174,6 +205,8 @@ services:
     expose:
       - '8080'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -205,7 +238,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       SPRING_DB_USER: ${SPRING_DB_USER}
       SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      DB_HOST: postgres
       SECRET_KEY: ${SECRET_KEY}
       DJANGO_API_URL: ${DJANGO_API_URL}
       REDIS_HOST: redis
@@ -214,6 +247,8 @@ services:
     expose:
       - '8080'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -236,6 +271,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data_prod:
+    driver: local
   redis_data_prod:
     driver: local
   static_volume_prod:

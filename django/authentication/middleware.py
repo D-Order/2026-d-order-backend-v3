@@ -33,11 +33,12 @@ def get_user_from_token(token_str):
         User = get_user_model()
         token = AccessToken(token_str)
         user = User.objects.get(id=token['user_id'])
-        logger.debug(f"[JWTWebSocketMiddleware] Token OK → user={user}")
-        return user
+        session_id = token.get('session_id')
+        logger.debug(f"[JWTWebSocketMiddleware] Token OK → user={user}, session_id={session_id}")
+        return user, session_id
     except Exception as e:
         logger.error(f"[JWTWebSocketMiddleware] Invalid token: {e}", exc_info=True)
-        return None
+        return None, None
 
 
 class JWTWebSocketMiddleware(BaseMiddleware):
@@ -56,10 +57,11 @@ class JWTWebSocketMiddleware(BaseMiddleware):
         scope["user"] = AnonymousUser()
 
         if access_token:
-            user = await get_user_from_token(access_token.value)
+            user, session_id = await get_user_from_token(access_token.value)
             if user:
                 scope["user"] = user
-                logger.info(f"[JWTWebSocketMiddleware] Token OK → user set: {user}")
+                scope["session_id"] = session_id
+                logger.info(f"[JWTWebSocketMiddleware] Token OK → user set: {user}, session_id={session_id}")
             else:
                 logger.warning("[JWTWebSocketMiddleware] Token provided but no valid user found")
         else:

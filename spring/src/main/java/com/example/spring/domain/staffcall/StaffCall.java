@@ -25,6 +25,18 @@ public class StaffCall {
     @Column(name = "cart_id", nullable = false)
     private Long cartId;
 
+    /** Django cart.table_usage_id — 결제확인 시 Django에 전달하기 위한 비정규화 */
+    @Column(name = "table_usage_id")
+    private Long tableUsageId;
+
+    /** Django table_table.table_num — 프론트 표시용 테이블 번호 */
+    @Column(name = "table_num")
+    private Integer tableNum;
+
+    /** emit 시점 부담 금액(쿠폰 할인 반영). Django 장바구니 스냅샷 summary.total 과 맞춤 */
+    @Column(name = "cart_price")
+    private Integer cartPrice;
+
     /** 비즈니스 호출 종류(물, 계산서 등) */
     @Column(name = "call_type", nullable = false, length = 64)
     private String callType;
@@ -34,7 +46,7 @@ public class StaffCall {
     private StaffCallCategory category;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 16)
+    @Column(name = "status", nullable = false, length = 32)
     private StaffCallStatus status;
 
     @Column(name = "created_at", nullable = false)
@@ -52,14 +64,21 @@ public class StaffCall {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @Column(name = "locked_by_session_id", length = 36)
+    private String lockedBySessionId;
+
     @Version
     @Column(name = "version")
     private Long version;
 
     @Builder
-    public StaffCall(Long boothId, Long tableId, Long cartId, String callType, StaffCallCategory category) {
+    public StaffCall(Long boothId, Long tableId, Long tableUsageId, Integer tableNum, Integer cartPrice,
+                     Long cartId, String callType, StaffCallCategory category) {
         this.boothId = boothId;
         this.tableId = tableId;
+        this.tableUsageId = tableUsageId;
+        this.tableNum = tableNum;
+        this.cartPrice = cartPrice;
         this.cartId = cartId;
         this.callType = callType;
         this.category = category;
@@ -68,10 +87,11 @@ public class StaffCall {
         this.updatedAt = this.createdAt;
     }
 
-    public void accept(String acceptedBy) {
+    public void accept(String acceptedBy, String sessionId) {
         this.status = StaffCallStatus.ACCEPTED;
         this.acceptedAt = LocalDateTime.now();
         this.acceptedBy = acceptedBy;
+        this.lockedBySessionId = sessionId;
         this.updatedAt = this.acceptedAt;
     }
 
@@ -79,6 +99,22 @@ public class StaffCall {
         this.status = StaffCallStatus.PENDING;
         this.acceptedAt = null;
         this.acceptedBy = null;
+        this.lockedBySessionId = null;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void complete() {
+        this.status = StaffCallStatus.COMPLETED;
+        this.completedAt = LocalDateTime.now();
+        this.updatedAt = this.completedAt;
+    }
+
+    /** Django 테이블 초기화로 해당 테이블 호출을 취소 처리(PENDING/ACCEPTED/COMPLETED 등 → {@link StaffCallStatus#CANCELLED}). */
+    public void cancelDueToTableReset() {
+        if (this.status == StaffCallStatus.CANCELLED) {
+            return;
+        }
+        this.status = StaffCallStatus.CANCELLED;
         this.updatedAt = LocalDateTime.now();
     }
 }

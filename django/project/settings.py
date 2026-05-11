@@ -222,7 +222,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': False,
     'AUTH_HEADER_TYPES': ('Bearer',),
@@ -245,7 +245,7 @@ _file_handlers = {} if IS_LOCAL else {
         'backupCount': 5,
         'formatter': 'verbose',
         'encoding': 'utf-8',
-        'level': 'INFO',
+        'level': 'DEBUG',
     },
     'file_error': {
         'class': 'logging.handlers.RotatingFileHandler',
@@ -459,3 +459,4 @@ SECURE_CONTENT_SECURITY_POLICY = {
 # Clickjacking 보호
 X_FRAME_OPTIONS = 'DENY'
 
+CUSTOMER_FRONT_BASE_URL = env('CUSTOMER_FRONT_BASE_URL',default='localhost:3000')

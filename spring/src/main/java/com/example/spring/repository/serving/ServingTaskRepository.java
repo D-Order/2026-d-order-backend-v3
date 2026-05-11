@@ -5,12 +5,19 @@ import com.example.spring.domain.serving.ServingTask;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ServingTaskRepository extends JpaRepository<ServingTask, Long> {
 
     /**
-     * Django의 orderitem 테이블과 조인하지 않고
-     * serving_task 자체만 조회합니다.
+     * 운영자 인증으로 추출한 booth_id 기준으로
+     * 해당 부스의 서빙 대기 목록만 조회
      */
-    List<ServingTask> findByStatusOrderByRequestedAtAsc(ServingStatus status);
+    List<ServingTask> findByBoothIdAndStatusOrderByRequestedAtAsc(Long boothId, ServingStatus status);
+
+    Optional<ServingTask> findFirstByBoothIdAndOrderItemIdAndStatusIn(Long boothId, Long orderItemId, List<ServingStatus> statuses);
+
+    long deleteByBoothIdAndOrderItemIdAndStatusIn(Long boothId, Long orderItemId, List<ServingStatus> statuses);
+
+    long deleteByBoothIdAndTableNumberAndStatusIn(Long boothId, Integer tableNumber, List<ServingStatus> statuses);
 }

@@ -158,6 +158,15 @@ public class JwtUtil {
     }
 
     /**
+     * Django session_id custom claim 추출 (UUID 문자열, 없으면 null)
+     */
+    public String getSessionIdFromToken(String token) {
+        Claims claims = parseClaims(token);
+        Object sessionId = claims.get("session_id");
+        return sessionId != null ? sessionId.toString() : null;
+    }
+
+    /**
      * 토큰 유효성 검증
      */
     public boolean validateToken(String token) {

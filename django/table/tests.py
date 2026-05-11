@@ -1,4 +1,5 @@
 import logging
+import threading
 from datetime import timedelta
 from django.test import override_settings, TransactionTestCase, TestCase
 from rest_framework.test import APITestCase, APIClient
@@ -226,7 +227,7 @@ class TableRetrieveTestCase(APITestCase):
         self.assertIn('data', response.data)
 
     def test_retrieve_response_fields(self):
-        """응답 필드 구조 검증 - table_number, table_total_price, order_items"""
+        """응답 필드 구조 검증 - table_number, table_total_price, order_list"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage)
@@ -236,37 +237,38 @@ class TableRetrieveTestCase(APITestCase):
 
         self.assertIn('table_number', data)
         self.assertIn('table_total_price', data)
-        self.assertIn('order_items', data)
+        self.assertIn('order_list', data)
 
-    def test_retrieve_order_items_flat_list(self):
-        """여러 Order의 OrderItem이 하나의 flat list로 반환"""
+    def test_retrieve_order_list_grouped(self):
+        """여러 Order가 order_list로 주문별 그룹핑되어 반환"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='아메리카노', price=4000, quantity=1)
         self._create_order(usage, menu_name='라떼', price=5000, quantity=2)
 
         response = self.client.get(self._detail_url(1))
-        order_items = response.data['data']['order_items']
+        order_list = response.data['data']['order_list']
 
-        self.assertIsInstance(order_items, list)
-        self.assertEqual(len(order_items), 2)
+        self.assertIsInstance(order_list, list)
+        self.assertEqual(len(order_list), 2)
 
     def test_retrieve_order_item_fields(self):
-        """order_items 각 항목에 id, name, quantity, fixed_price, created_at 포함"""
+        """order_list 각 주문의 order_items에 id, name, quantity, fixed_price 포함"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='아메리카노', price=4000, quantity=2)
 
         response = self.client.get(self._detail_url(1))
-        item = response.data['data']['order_items'][0]
+        order = response.data['data']['order_list'][0]
+        item = order['order_items'][0]
 
         self.assertIn('id', item)
         self.assertIsNotNone(item['id'])
         self.assertEqual(item['name'], '아메리카노')
         self.assertEqual(item['quantity'], 2)
         self.assertEqual(item['fixed_price'], 4000)
-        self.assertIn('created_at', item)
-        self.assertIsNotNone(item['created_at'])
+        self.assertIn('order_number', order)
+        self.assertIn('created_at', order)
 
     def test_retrieve_total_price(self):
         """table_total_price가 usage.accumulated_amount와 일치"""
@@ -281,18 +283,18 @@ class TableRetrieveTestCase(APITestCase):
 
         self.assertEqual(response.data['data']['table_total_price'], 13000)
 
-    def test_retrieve_order_items_newest_first(self):
-        """order_items는 최신 항목이 먼저 반환"""
+    def test_retrieve_order_list_order_number(self):
+        """order_list는 주문 순서대로 order_number 부여"""
         self.client.force_authenticate(user=self.user)
         usage = self._activate_table(1)
         self._create_order(usage, menu_name='첫번째메뉴', price=3000, quantity=1)
         self._create_order(usage, menu_name='두번째메뉴', price=3000, quantity=1)
 
         response = self.client.get(self._detail_url(1))
-        order_items = response.data['data']['order_items']
+        order_list = response.data['data']['order_list']
 
-        self.assertEqual(order_items[0]['name'], '두번째메뉴')
-        self.assertEqual(order_items[1]['name'], '첫번째메뉴')
+        self.assertEqual(order_list[0]['order_number'], 1)
+        self.assertEqual(order_list[1]['order_number'], 2)
 
     def test_retrieve_no_active_usage_returns_404(self):
         """활성 세션 없는 테이블 조회 시 404"""
@@ -431,6 +433,33 @@ class TableResetTestCase(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    def test_reset_merged_tables_without_active_session(self):
+        """병합되었지만 IN_USE가 아닌 테이블도 초기화로 병합 해제 가능 (#307)"""
+        self.client.force_authenticate(user=self.user)
+        self.client.post(MERGE_URL, {'table_nums': [1, 2, 3]}, format='json')
+
+        for table_num in [1, 2, 3]:
+            table = Table.objects.get(booth=self.booth, table_num=table_num)
+            self.assertEqual(table.status, Table.Status.ACTIVE)
+            self.assertIsNotNone(table.group)
+
+        response = self.client.post(RESET_URL, {'table_nums': [1]}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for table_num in [1, 2, 3]:
+            table = Table.objects.get(booth=self.booth, table_num=table_num)
+            self.assertEqual(table.status, Table.Status.ACTIVE)
+            self.assertIsNone(table.group)
+
+    def test_reset_idle_unmerged_table_rejected(self):
+        """병합되지 않은 미사용 테이블은 여전히 초기화 거부"""
+        self.client.force_authenticate(user=self.user)
+
+        with suppress_request_warnings():
+            response = self.client.post(RESET_URL, {'table_nums': [1]}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
 
 @override_settings(STORAGES=IN_MEMORY_STORAGES)
 class TableMergeTestCase(APITestCase):
@@ -558,7 +587,7 @@ class TableEnterTestCase(APITestCase):
         self.client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
         self.user = User.objects.get(username='testuser')
         self.booth = Booth.objects.get(user=self.user)
-        self.enter_url = f'/api/v3/django/booth/{self.booth.pk}/table/'
+        self.enter_url = f'/api/v3/django/booth/{self.booth.public_id}/table/'
         self.client.cookies.clear()
 
     def test_enter_table_success(self):
@@ -607,7 +636,7 @@ class TableEnterTestCase(APITestCase):
     def test_enter_table_invalid_booth(self):
         """존재하지 않는 부스 입장 시 404"""
         with suppress_request_warnings():
-            response = self.client.post('/api/v3/django/booth/9999/table/', {'table_num': 1}, format='json')
+            response = self.client.post('/api/v3/django/booth/00000000-0000-0000-0000-000000000000/table/', {'table_num': 1}, format='json')
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -1207,3 +1236,74 @@ class MergeActiveUsagesTestCase(TestCase):
         order.refresh_from_db()
         rep_cart = Cart.objects.get(table_usage=self._rep_usage(self.t1))
         self.assertEqual(order.cart, rep_cart)
+
+
+@override_settings(STORAGES=IN_MEMORY_STORAGES)
+class TableConcurrentEnterTestCase(TransactionTestCase):
+    """테이블 입장 동시 호출 시 TableUsage 중복 생성 방지 테스트"""
+
+    def setUp(self):
+        client = APIClient()
+        client.post(SIGNUP_URL, VALID_SIGNUP_DATA, format='json')
+        self.user = User.objects.get(username='testuser')
+        self.booth = Booth.objects.get(user=self.user)
+
+    def test_동시_입장_2개_요청시_TableUsage_하나만_생성(self):
+        """동시에 같은 테이블에 2개 입장 요청이 들어와도 TableUsage가 1개만 생성되어야 한다"""
+        results = []
+        errors = []
+        barrier = threading.Barrier(2)
+
+        def enter():
+            try:
+                barrier.wait()
+                usage = TableService.init_or_enter_table(self.booth, 1)
+                results.append(usage.id)
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=enter)
+        t2 = threading.Thread(target=enter)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        self.assertEqual(len(errors), 0, f"예외 발생: {errors}")
+        active_usages = TableUsage.objects.filter(
+            table__booth=self.booth,
+            table__table_num=1,
+            ended_at__isnull=True,
+        )
+        self.assertEqual(active_usages.count(), 1, "TableUsage가 1개여야 합니다")
+        self.assertEqual(results[0], results[1], "두 요청이 같은 TableUsage를 반환해야 합니다")
+
+    def test_동시_입장_5개_요청시_TableUsage_하나만_생성(self):
+        """5개 동시 요청에도 TableUsage가 1개만 생성되어야 한다"""
+        results = []
+        errors = []
+        n = 5
+        barrier = threading.Barrier(n)
+
+        def enter():
+            try:
+                barrier.wait()
+                usage = TableService.init_or_enter_table(self.booth, 2)
+                results.append(usage.id)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=enter) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(len(errors), 0, f"예외 발생: {errors}")
+        active_usages = TableUsage.objects.filter(
+            table__booth=self.booth,
+            table__table_num=2,
+            ended_at__isnull=True,
+        )
+        self.assertEqual(active_usages.count(), 1, "TableUsage가 1개여야 합니다")
+        self.assertEqual(len(set(results)), 1, "모든 요청이 같은 TableUsage를 반환해야 합니다")

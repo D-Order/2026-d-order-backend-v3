@@ -292,11 +292,11 @@ class SetMenuSerializer(serializers.ModelSerializer):
         return validated_items
     
     def to_representation(self, instance):
-        """응답 포맷 조정 (set_items_output -> set_items)"""
-        data = super().to_representation(instance)
-        # set_items_output을 set_items로 매핑
-        data['set_items'] = data.pop('set_items_output', [])
-        return data
+        """출력 시 set_items_output을 set_items로 변환"""
+        ret = super().to_representation(instance)
+        if 'set_items_output' in ret:
+            ret['set_items'] = ret.pop('set_items_output')
+        return ret
 
 
 class SetMenuUpdateSerializer(serializers.ModelSerializer):
@@ -404,7 +404,8 @@ class SetMenuUpdateSerializer(serializers.ModelSerializer):
         return attrs
     
     def to_representation(self, instance):
-        """응답 포맷 조정 (set_items_output -> set_items)"""
-        data = super().to_representation(instance)
-        data['set_items'] = data.pop('set_items_output', [])
-        return data
+        """출력 시 set_items_output을 set_items로 변환"""
+        ret = super().to_representation(instance)
+        if 'set_items_output' in ret:
+            ret['set_items'] = ret.pop('set_items_output')
+        return ret

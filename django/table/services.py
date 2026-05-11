@@ -1,8 +1,10 @@
 import logging
+from datetime import datetime
 
 from .models import Table, TableGroup, TableUsage
 from django.utils.timezone import now
 from django.db import transaction
+from django.db.models import Q
 from rest_framework.exceptions import ValidationError, NotFound
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -140,8 +142,11 @@ class OrderBroadcastService:
                     f"[OrderBroadcast] booth={booth_id} table={table_num} "
                     f"주문 {len(all_orders)}건 브로드캐스트 완료"
                 )
-            except Exception as e:
-                logger.error(f"[OrderBroadcast] 전송 실패: {e}")
+            except Exception:
+                logger.exception(
+                    f"[OrderBroadcast] 전송 실패 booth={booth_id} "
+                    f"table={table_num} table_usage={table_usage_id}"
+                )
 
         transaction.on_commit(_send)
 
@@ -162,12 +167,25 @@ class TableService:
         transaction.on_commit(send_ws)
 
     @staticmethod
+    def _broadcast_to_order_group(booth_pk, event):
+        """주문 관리 그룹에 이벤트를 전송 (테이블 초기화 알림 등)"""
+        def send_ws():
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                logger.error('[TableService] channel_layer 없어요')
+                return
+            async_to_sync(channel_layer.group_send)(f'booth_{booth_pk}.order', event)
+
+        # 이게 있어야 교착 상태에 안 빠져요
+        transaction.on_commit(send_ws)
+
+    @staticmethod
     def notify_spring_reset(booth_id, table_nums):
-        """테이블 초기화 → Spring에 알림"""
-        publish(f"booth:{booth_id}:tables:reset", {
-            "table_nums": table_nums,
-            "count": len(table_nums)
-        })
+        """테이블 초기화 → Spring에 알림 (테이블당 1건씩 발행)"""
+        for table_num in table_nums:
+            publish(f"booth:{booth_id}:order:reset", {
+                "table_num": table_num,
+            })
 
     # @staticmethod
     # def notify_spring_merge(booth_id, representative_table, table_nums):
@@ -198,8 +216,9 @@ class TableService:
         if not table_num:
             raise ValidationError('테이블 번호는 필수입니다.')
 
-        # 테이블 조회
-        table = Table.objects.select_related('group__representative_table').filter(
+        # 테이블 조회 (행 잠금: 동시 입장 요청 시 TOCTOU 경합 방지)
+        # of=('self',): nullable outer join 대상 제외, Table 행만 잠금
+        table = Table.objects.select_related('group__representative_table').select_for_update(of=('self',)).filter(
             booth=booth, table_num=table_num
         ).first()
         if not table:
@@ -209,8 +228,13 @@ class TableService:
         if table.status == Table.Status.INACTIVE:
             raise ValidationError('해당 테이블은 현재 이용할 수 없습니다.')
 
-        # 병합된 테이블이면 대표 테이블 기준으로 처리
-        representative_table = table.group.representative_table if table.group else table
+        # 병합된 테이블이면 대표 테이블 기준으로 처리 (대표 테이블도 잠금)
+        if table.group:
+            representative_table = Table.objects.select_for_update().get(
+                pk=table.group.representative_table_id
+            )
+        else:
+            representative_table = table
 
         # 이미 사용 중인 경우 대표 테이블의 기존 세션 반환
         if table.status == Table.Status.IN_USE:
@@ -229,7 +253,7 @@ class TableService:
             'type': 'enter_table',
             'data': {
                 'table_num': table_num,
-                'started_at': table_usage.started_at.isoformat(),
+                'started_at': table_usage.started_at.isoformat() if table_usage.started_at else None,
             }
         })
 
@@ -245,7 +269,7 @@ class TableService:
         Returns:
             TableUsage Entity: 생성된 테이블 사용 기록 객체
         """
-        return TableUsage.objects.create(table=table, started_at=now())
+        return TableUsage.objects.create(table=table)
 
     @staticmethod
     @transaction.atomic
@@ -273,8 +297,11 @@ class TableService:
             table_num__in=table_nums,
         )
 
-        if tables.exclude(status=Table.Status.IN_USE).exists():
-            raise ValidationError('사용중인 테이블만 초기화 할 수 있습니다.')
+        if tables.filter(
+            Q(status=Table.Status.INACTIVE)
+            | Q(status=Table.Status.ACTIVE, group__isnull=True)
+        ).exists():
+            raise ValidationError('사용중이거나 병합된 테이블만 초기화 할 수 있습니다.')
         
         # 3. 존재하지 않는 테이블 확인
         found_count = tables.count()
@@ -321,9 +348,10 @@ class TableService:
         # usage_minutes 계산 (bulk_update 사용)
         if updated_count > 0:
             for usage in active_usages_cache:
-                usage.usage_minutes = int(
-                    (now_time - usage.started_at).total_seconds() / 60
-                )
+                if usage.started_at:
+                    usage.usage_minutes = int(
+                        (now_time - usage.started_at).total_seconds() / 60
+                    )
             TableUsage.objects.bulk_update(active_usages_cache, fields=['usage_minutes'])
 
         # 6. 테이블 상태 일괄 초기화
@@ -337,7 +365,28 @@ class TableService:
                 'count': found_count,
             }
         })
+        # 주문 관리 대시보드에도 알림 (WebSocket 실시간 반영용)
+        TableService._broadcast_to_order_group(booth.pk, {
+            'type': 'admin_table_reset',
+            'data': {
+                'table_nums': reset_table_nums,
+                'count': found_count,
+            }
+        })
         TableService.notify_spring_reset(booth.pk, reset_table_nums)
+
+        # 서빙 태스크 취소: COOKED/SERVING 아이템 → Spring SERVING_CANCELLED 발행
+        reset_usage_ids = [u.pk for u in active_usages_cache]
+        if reset_usage_ids:
+            from order.services import OrderService
+            OrderService.cancel_serving_tasks_for_reset(reset_usage_ids, booth.pk)
+
+            from cart.services_ws import broadcast_cart_reset_on_table_end
+            for usage_id in reset_usage_ids:
+                transaction.on_commit(
+                    lambda uid=usage_id: broadcast_cart_reset_on_table_end(uid)
+                )
+
         return found_count
 
 
@@ -362,13 +411,14 @@ class TableService:
         if not active_usages:
             return
 
-        earliest_started_at = min(u.started_at for u in active_usages)
+        started_ats = [u.started_at for u in active_usages if u.started_at]
+        earliest_started_at = min(started_ats) if started_ats else None
         total_accumulated = sum(u.accumulated_amount for u in active_usages)
 
         # 대표 usage 결정: 대표 테이블의 활성 usage가 없으면 가장 이른 usage를 재할당
         rep_usage = next((u for u in active_usages if u.table_id == representative_table.id), None)
         if rep_usage is None:
-            rep_usage = min(active_usages, key=lambda u: u.started_at)
+            rep_usage = min(active_usages, key=lambda u: u.started_at or datetime.max)
             rep_usage.table = representative_table
             rep_usage.save(update_fields=['table'])
 
@@ -537,6 +587,15 @@ class TableService:
 
         TableService._broadcast(booth.pk, {
             'type': 'merge_table',
+            'data': {
+                'table_nums': merged_table_nums,
+                'representative_table': representative_table.table_num,
+                'count': all_tables_count,
+            }
+        })
+        # 주문 관리 대시보드에도 알림 (WebSocket 실시간 반영용)
+        TableService._broadcast_to_order_group(booth.pk, {
+            'type': 'admin_table_merge',
             'data': {
                 'table_nums': merged_table_nums,
                 'representative_table': representative_table.table_num,

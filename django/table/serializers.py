@@ -40,7 +40,9 @@ class TableListSerializer(serializers.ModelSerializer):
 
     def get_started_at(self, obj):
         usage = self._get_usage(obj)
-        return timezone.localtime(usage.started_at).isoformat() if usage else None
+        if not usage or not usage.started_at:
+            return None
+        return timezone.localtime(usage.started_at).isoformat()
 
     def get_order_list(self, obj):
         from order.models import OrderItem

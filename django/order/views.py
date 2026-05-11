@@ -15,6 +15,9 @@ from table.models import Table, TableUsage
 
 
 class OrderCancelAPIView(APIView):
+    """POST /api/v3/django/order/cancel/ - 운영자용 (인증 필요)"""
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         event_data = request.data
         result = OrderService.handle_order_cancelled_event(event_data)
@@ -120,6 +123,7 @@ class TableOrderHistoryAPIView(APIView):
     - 세트메뉴는 개별 구성품이 아닌 세트메뉴 단위로 표시
     - 주문별(order_list) 구조로 반환
     """
+    authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request, table_usage_id):

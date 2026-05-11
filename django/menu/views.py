@@ -1,6 +1,6 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
@@ -81,8 +81,16 @@ class MenuDetailAPIView(APIView):
         menu, error_response = self.get_menu(menu_id, booth, action='delete')
         if error_response:
             return error_response
-        deleted_menu_id = menu.id
-        MenuService.delete_menu(menu)
+        
+        try:
+            deleted_menu_id = menu.id
+            MenuService.delete_menu(menu)
+        except ValidationError as e:
+            return Response({
+                "message": str(e.detail[0]) if e.detail else "메뉴 삭제에 실패했습니다.",
+                "code": "DELETION_FAILED"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         return Response({
             "message": "메뉴 삭제 성공",
             "data": {"menu_id": deleted_menu_id}
@@ -190,8 +198,16 @@ class SetMenuDetailAPIView(APIView):
         set_menu, error_response = self.get_set_menu(set_id, booth, action='delete')
         if error_response:
             return error_response
-        deleted_set_id = set_menu.id
-        SetMenuService.delete_set_menu(set_menu)
+        
+        try:
+            deleted_set_id = set_menu.id
+            SetMenuService.delete_set_menu(set_menu)
+        except ValidationError as e:
+            return Response({
+                "message": str(e.detail[0]) if e.detail else "세트메뉴 삭제에 실패했습니다.",
+                "code": "DELETION_FAILED"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         return Response({
             "message": "메뉴 삭제 성공",
             "data": {"set_id": deleted_set_id}
@@ -250,6 +266,17 @@ class BoothMenuListAPIView(APIView):
             item_stocks = [item.menu.stock // item.quantity for item in setmenu.items.all() if item.menu.stock is not None and item.quantity > 0]
             min_stock = min(item_stocks) if item_stocks else 0
             is_soldout = any(item.menu.stock == 0 for item in setmenu.items.all())
+            
+            # set_items 구성
+            set_items = []
+            for item in setmenu.items.all():
+                set_items.append({
+                    "menu_id": item.menu.pk,
+                    "quantity": item.quantity,
+                    "base_price": int(item.menu.price),
+                    "stock": item.menu.stock
+                })
+            
             data.append({
                 "id": setmenu.pk,
                 "name": setmenu.name,
@@ -260,7 +287,8 @@ class BoothMenuListAPIView(APIView):
                 "stock": min_stock,
                 "is_soldout": is_soldout,
                 "is_fixed": False,
-                "created_at": setmenu.created_at.isoformat() if hasattr(setmenu, 'created_at') else None
+                "created_at": setmenu.created_at.isoformat() if hasattr(setmenu, 'created_at') else None,
+                "set_items": set_items
             })
         return Response({
             "message": "운영자 메뉴 목록 조회 완료",
@@ -273,10 +301,11 @@ class UserMenuListAPIView(APIView):
     사용자 메뉴판 조회 API
     GET /api/v3/django/booth/<int:booth_id>/menu-list/?table_number=xxx
     """
-    permission_classes = []  # 로그인 없이 접근 가능
-    def get(self, request, booth_id):
+    authentication_classes = []  # JWT 인증 비활성화
+    permission_classes = [AllowAny]  # 로그인 없이 접근 가능
+    def get(self, request, booth_uuid):
         table_num = request.GET.get('table_num')
-        booth = get_object_or_404(Booth, pk=booth_id)
+        booth = get_object_or_404(Booth, public_id=booth_uuid)
         table_info = None
         if table_num is not None:
             try:
@@ -307,6 +336,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(fee_menu.price),
                 "description": fee_menu.description or "",
                 "image": fee_menu.image.url if fee_menu.image else None,
+                "stock": fee_menu.stock,
                 "is_soldout": fee_menu.stock == 0
             }]
         # SET
@@ -315,7 +345,9 @@ class UserMenuListAPIView(APIView):
         for setmenu in set_menus:
             origin_price = sum([item.menu.price * item.quantity for item in setmenu.items.all()])
             discount_rate = round((origin_price - setmenu.price) / origin_price * 100, 1) if origin_price > 0 else 0.0
-            is_soldout = any(item.menu.stock == 0 for item in setmenu.items.all())
+            items = list(setmenu.items.all())
+            is_soldout = any(item.menu.stock == 0 for item in items)
+            min_stock = min((item.menu.stock // item.quantity for item in items), default=0)
             set_data.append({
                 "id": setmenu.pk,
                 "name": setmenu.name,
@@ -324,6 +356,7 @@ class UserMenuListAPIView(APIView):
                 "discount_rate": discount_rate,
                 "description": setmenu.description or "",
                 "image": setmenu.image.url if setmenu.image else None,
+                "stock": min_stock,
                 "is_soldout": is_soldout
             })
         set_data.sort(key=lambda x: x['price'], reverse=True)
@@ -337,6 +370,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(menu.price),
                 "description": menu.description or "",
                 "image": menu.image.url if menu.image else None,
+                "stock": menu.stock,
                 "is_soldout": menu.stock == 0
             })
         # DRINK
@@ -349,6 +383,7 @@ class UserMenuListAPIView(APIView):
                 "price": int(drink.price),
                 "description": drink.description or "",
                 "image": drink.image.url if drink.image else None,
+                "stock": drink.stock,
                 "is_soldout": drink.stock == 0
             })
         resp = {

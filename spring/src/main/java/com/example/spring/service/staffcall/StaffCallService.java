@@ -9,9 +9,12 @@ import com.example.spring.domain.table.TableUsageEntity;
 import com.example.spring.dto.redis.StaffCallRedisMessageDto;
 import com.example.spring.dto.staffcall.request.StaffCallAcceptRequest;
 import com.example.spring.dto.staffcall.request.StaffCallCancelRequest;
+import com.example.spring.dto.staffcall.request.StaffCallCompleteRequest;
+import com.example.spring.dto.staffcall.request.StaffCallDeleteRequest;
 import com.example.spring.dto.staffcall.request.StaffCallEmitRequest;
 import com.example.spring.dto.staffcall.response.StaffCallAcceptResponse;
 import com.example.spring.dto.staffcall.response.StaffCallItemResponse;
+import com.example.spring.service.cart.CartPayableAmountService;
 import com.example.spring.repository.cart.CartEntityRepository;
 import com.example.spring.repository.staffcall.StaffCallRepository;
 import com.example.spring.repository.table.BoothTableRepository;
@@ -29,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -40,6 +44,7 @@ public class StaffCallService {
     private final StaffCallQueryService staffCallQueryService;
     private final BoothTableRepository boothTableRepository;
     private final CartEntityRepository cartEntityRepository;
+    private final CartPayableAmountService cartPayableAmountService;
     private final TableUsageEntityRepository tableUsageEntityRepository;
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper;
@@ -54,7 +59,7 @@ public class StaffCallService {
     private CustomerStaffCallWebSocketHandler customerStaffCallWebSocketHandler;
 
     @Transactional
-    public StaffCallAcceptResponse accept(Long boothId, String accessToken, StaffCallAcceptRequest req) {
+    public StaffCallAcceptResponse accept(Long boothId, String accessToken, String sessionId, StaffCallAcceptRequest req) {
         if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null) {
             throw new IllegalArgumentException("table_id, cart_id, call_type은 필수입니다.");
         }
@@ -79,7 +84,7 @@ public class StaffCallService {
             acceptedBy = "unknown";
         }
 
-        sc.accept(acceptedBy);
+        sc.accept(acceptedBy, sessionId);
 
         publishRedis(sc, "staff_call_accepted");
         try {
@@ -114,6 +119,14 @@ public class StaffCallService {
             throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
         }
 
+        // 멱등성: 이미 PENDING이면 취소된 상태로 간주하고 그대로 성공 처리
+        if (sc.getStatus() == StaffCallStatus.PENDING) {
+            Map<String, Object> out = new HashMap<>();
+            out.put("message", "이미 호출 수락이 취소된 상태입니다.");
+            out.put("data", StaffCallItemResponse.from(sc));
+            return out;
+        }
+
         if (sc.getStatus() != StaffCallStatus.ACCEPTED) {
             throw new StaffCallConflictException("수락된 호출만 취소할 수 있습니다.");
         }
@@ -137,6 +150,104 @@ public class StaffCallService {
         Map<String, Object> out = new HashMap<>();
         out.put("message", "호출 수락을 취소했습니다.");
         out.put("data", StaffCallItemResponse.from(sc));
+        return out;
+    }
+
+    @Transactional
+    public void releaseBySessionId(String sessionId) {
+        List<StaffCall> locked = staffCallRepository.findByLockedBySessionIdAndStatus(sessionId, StaffCallStatus.ACCEPTED);
+        for (StaffCall sc : locked) {
+            sc.unaccept();
+            publishRedis(sc, "staff_call_unaccepted");
+            try {
+                staffCallWebSocketHandler.broadcastSnapshot(sc.getBoothId(),
+                        staffCallQueryService.listForBooth(sc.getBoothId(), 50, 0));
+                customerStaffCallWebSocketHandler.broadcastStatus(sc);
+            } catch (Exception e) {
+                log.error("[staffcall release] broadcast 실패 sessionId={}", sessionId, e);
+            }
+        }
+    }
+
+    @Transactional
+    public Map<String, Object> complete(Long boothId, StaffCallCompleteRequest req) {
+        if (req.getTableId() == null || req.getCartId() == null || req.getCallType() == null) {
+            throw new IllegalArgumentException("table_id, cart_id, call_type은 필수입니다.");
+        }
+
+        StaffCall sc = staffCallRepository
+                .findByTableCartCallTypeForUpdate(req.getTableId(), req.getCartId(), req.getCallType())
+                .orElseThrow(() -> new IllegalArgumentException("해당 호출을 찾을 수 없습니다."));
+
+        if (!boothId.equals(sc.getBoothId())) {
+            throw new IllegalArgumentException("부스 정보가 일치하지 않습니다.");
+        }
+
+        if (sc.getStatus() != StaffCallStatus.ACCEPTED) {
+            if (sc.getStatus() == StaffCallStatus.COMPLETED) {
+                throw new StaffCallConflictException("이미 완료된 요청입니다.");
+            }
+            throw new StaffCallConflictException("수락된 호출만 완료 처리할 수 있습니다.");
+        }
+
+        sc.complete();
+
+        publishRedis(sc, "staff_call_completed");
+        try {
+            staffCallWebSocketHandler.broadcastSnapshot(boothId,
+                    staffCallQueryService.listForBooth(boothId, 50, 0));
+            customerStaffCallWebSocketHandler.broadcastStatus(sc);
+        } catch (Exception e) {
+            log.error("[staffcall complete] 스냅샷 조회/WS 푸시 실패 — 완료는 반영됨 boothId={}", boothId, e);
+        }
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("message", "호출을 완료 처리했습니다.");
+        out.put("data", StaffCallItemResponse.from(sc));
+        return out;
+    }
+
+    /**
+     * 무인증 고객이 생성 직후 staff_call을 삭제(취소)하는 API.
+     * - subscribe_token으로만 권한 검증
+     * - PENDING 상태만 삭제 가능 (ACCEPTED 이후는 충돌)
+     */
+    @Transactional
+    public Map<String, Object> deleteByCustomer(StaffCallDeleteRequest req) {
+        if (req == null || req.getStaffCallId() == null) {
+            throw new IllegalArgumentException("staff_call_id는 필수입니다.");
+        }
+        Long staffCallId = req.getStaffCallId();
+        String token = req.getSubscribeToken();
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("subscribe_token은 필수입니다.");
+        }
+        if (!customerStaffCallWebSocketHandler.isValidSubscribeToken(staffCallId, token)) {
+            throw new StaffCallConflictException("유효하지 않은 subscribe_token 입니다.");
+        }
+
+        StaffCall sc = staffCallRepository.findById(staffCallId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 호출을 찾을 수 없습니다."));
+
+        if (sc.getStatus() != StaffCallStatus.PENDING) {
+            throw new StaffCallConflictException("대기 중인 호출만 취소할 수 있습니다.");
+        }
+
+        Long boothId = sc.getBoothId();
+        staffCallRepository.delete(sc);
+
+        publishRedis(sc, "staff_call_deleted");
+        try {
+            staffCallWebSocketHandler.broadcastSnapshot(boothId,
+                    staffCallQueryService.listForBooth(boothId, 50, 0));
+            customerStaffCallWebSocketHandler.broadcastDeleted(staffCallId);
+        } catch (Exception e) {
+            log.error("[staffcall deleteByCustomer] 스냅샷 조회/WS 푸시 실패 — 삭제는 반영됨 boothId={}", boothId, e);
+        }
+
+        Map<String, Object> out = new HashMap<>();
+        out.put("message", "호출을 취소했습니다.");
+        out.put("data", Map.of("staff_call_id", staffCallId));
         return out;
     }
 
@@ -167,15 +278,21 @@ public class StaffCallService {
             throw new IllegalArgumentException("비활성 테이블에서는 호출할 수 없습니다.");
         }
 
-        long pendingDup = staffCallRepository.countByTableIdAndCartIdAndCallTypeAndStatus(
-                actualTableId, req.getCartId(), req.getCallType(), StaffCallStatus.PENDING);
-        if (pendingDup > 0) {
-            throw new StaffCallConflictException("동일한 호출이 이미 대기 중입니다.");
+        long activeDup = staffCallRepository.countByTableIdAndCartIdAndCallTypeAndStatusIn(
+                actualTableId, req.getCartId(), req.getCallType(),
+                List.of(StaffCallStatus.PENDING, StaffCallStatus.ACCEPTED));
+        if (activeDup > 0) {
+            throw new StaffCallConflictException("동일한 호출이 이미 진행 중입니다.");
         }
+
+        int displayCartPrice = cartPayableAmountService.resolvePayableTotal(cart);
 
         StaffCall sc = StaffCall.builder()
                 .boothId(boothId)
                 .tableId(actualTableId)
+                .tableUsageId(cart.getTableUsageId())
+                .tableNum(table.getTableNum())
+                .cartPrice(displayCartPrice)
                 .cartId(req.getCartId())
                 .callType(req.getCallType())
                 .category(req.getCategory())
@@ -211,6 +328,9 @@ public class StaffCallService {
                     .boothId(sc.getBoothId())
                     .tableId(sc.getTableId())
                     .cartId(sc.getCartId())
+                    .tableUsageId(sc.getTableUsageId())
+                    .tableNum(sc.getTableNum())
+                    .cartPrice(sc.getCartPrice())
                     .callType(sc.getCallType())
                     .category(sc.getCategory() != null ? sc.getCategory().name() : null)
                     .status(sc.getStatus() != null ? sc.getStatus().name() : null)

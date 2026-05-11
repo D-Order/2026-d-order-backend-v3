@@ -69,21 +69,37 @@ class BoothTableUsageResetAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class BoothNameAPIView(APIView):
+class BoothNamePublicAPIView(APIView):
     """부스 이름 조회용"""
     permission_classes = [AllowAny]
+    authentication_classes = []
 
-    def get(self,request, booth_id):
+    def get(self, request, booth_uuid):
 
         # 못찾을때
         try:
-            booth = Booth.objects.get(pk = booth_id)
+            booth = Booth.objects.get(public_id=booth_uuid)
         except Booth.DoesNotExist:
             return Response({
                 "message" : "해당 부스를 찾을 수 없습니다."
             }, status=status.HTTP_404_NOT_FOUND)
     
 
+        return Response({
+            "message": "부스 이름을 조회하였습니다.",
+            "data" : {
+                "booth_name" : booth.name,
+            }
+        }, status=status.HTTP_200_OK)
+        
+class BoothNameAPIView(APIView):
+    """부스 이름 조회용"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """QR URL 반환"""
+        booth = request.user.booth
+        
         return Response({
             "message": "부스 이름을 조회하였습니다.",
             "data" : {

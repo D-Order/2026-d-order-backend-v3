@@ -162,6 +162,8 @@ class CouponDownloadAPIView(APIView):
 
 # 손님용: 쿠폰 적용/취소
 class CouponApplyAPIView(APIView):
+    authentication_classes = []
+    
     def post(self, request):
         serializer = CouponApplySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

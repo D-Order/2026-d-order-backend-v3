@@ -53,7 +53,7 @@ class CouponCode(models.Model):
 class CartCouponApply(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="applied_coupons")
     round = models.IntegerField()
-    coupon_code = models.OneToOneField(CouponCode, on_delete=models.CASCADE, related_name="applied_record")
+    coupon_code = models.ForeignKey(CouponCode, on_delete=models.CASCADE, related_name="applied_record")
     applied_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
