@@ -13,9 +13,6 @@ services:
       - certbot_certs:/etc/letsencrypt:ro
       - static_volume_prod:/app/static:ro
       - nginx_logs_prod:/var/log/nginx
-    depends_on:
-      - django-blue
-      - spring-blue
     healthcheck:
       test:
         [
@@ -58,6 +55,8 @@ services:
       SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
       TZ: Asia/Seoul
       PGTZ: Asia/Seoul
+    ports:
+      - '5432:5432'
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
       - ./db-scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
@@ -125,6 +124,7 @@ services:
         condition: service_healthy
     volumes:
       - static_volume_prod:/app/static
+      - django_logs_prod:/app/logs
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
       interval: 15s
@@ -175,6 +175,7 @@ services:
         condition: service_healthy
     volumes:
       - static_volume_prod:/app/static
+      - django_logs_prod:/app/logs
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
       interval: 15s
@@ -278,6 +279,8 @@ volumes:
   static_volume_prod:
     driver: local
   nginx_logs_prod:
+    driver: local
+  django_logs_prod:
     driver: local
   certbot_www:
     driver: local
