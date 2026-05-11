@@ -13,9 +13,6 @@ services:
       - certbot_certs:/etc/letsencrypt:ro
       - static_volume_prod:/app/static:ro
       - nginx_logs_prod:/var/log/nginx
-    depends_on:
-      - django-blue
-      - spring-blue
     healthcheck:
       test:
         [
