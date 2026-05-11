@@ -45,14 +45,15 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: d-order-postgres-prod
+    # 필수 env가 비어 있으면 컨테이너를 띄우지 않음 (빈 비밀번호로 유저가 생성되는 사고 방지)
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB not set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER not set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD not set}
       POSTGRES_INITDB_ARGS: -U postgres
       PGDATA: /var/lib/postgresql/data/pgdata
-      SPRING_DB_USER: ${SPRING_DB_USER}
-      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
+      SPRING_DB_USER: ${SPRING_DB_USER:?SPRING_DB_USER not set}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:?SPRING_DB_PASSWORD not set}
       TZ: Asia/Seoul
       PGTZ: Asia/Seoul
     ports:
@@ -194,9 +195,9 @@ services:
     command: ["--spring.profiles.active=prod"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      POSTGRES_DB: ${POSTGRES_DB}
-      SPRING_DB_USER: ${SPRING_DB_USER}
-      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB not set}
+      SPRING_DB_USER: ${SPRING_DB_USER:?SPRING_DB_USER not set}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:?SPRING_DB_PASSWORD not set}
       DB_HOST: postgres
       SECRET_KEY: ${SECRET_KEY}
       DJANGO_API_URL: ${DJANGO_API_URL}
@@ -236,9 +237,9 @@ services:
     command: ["--spring.profiles.active=prod"]
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      POSTGRES_DB: ${POSTGRES_DB}
-      SPRING_DB_USER: ${SPRING_DB_USER}
-      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB not set}
+      SPRING_DB_USER: ${SPRING_DB_USER:?SPRING_DB_USER not set}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:?SPRING_DB_PASSWORD not set}
       DB_HOST: postgres
       SECRET_KEY: ${SECRET_KEY}
       DJANGO_API_URL: ${DJANGO_API_URL}
