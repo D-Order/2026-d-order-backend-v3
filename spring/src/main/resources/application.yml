@@ -127,9 +127,10 @@ spring:
       max-lifetime: 1800000
   jpa:
     hibernate:
-      # 운영 스키마는 Django migration 이 관리. Hibernate 는 검증/변경 모두 수행하지 않음.
+      # 운영 스키마는 Django migration 이 관리. 단 Spring 측 모델 변경 가능성을 위해 update 유지.
       # validate 는 Spring 엔티티의 FK 컬럼 매핑(_id 접미사 누락) 정리가 끝난 뒤 재도입 예정 (#393).
-      ddl-auto: none
+      # 매 부팅 시 권한 부족 ALTER WARN 누적은 감수.
+      ddl-auto: update
     properties:
       hibernate:
         show_sql: false
