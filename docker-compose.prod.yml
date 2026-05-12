@@ -134,7 +134,9 @@ services:
       retries: 3
     stop_grace_period: 30s
     networks:
-      - d-order-network-prod
+      d-order-network-prod:
+        aliases:
+          - django-active
     restart: unless-stopped
 
   django-green:
@@ -185,7 +187,9 @@ services:
       retries: 3
     stop_grace_period: 30s
     networks:
-      - d-order-network-prod
+      d-order-network-prod:
+        aliases:
+          - django-active
     restart: unless-stopped
 
   spring-blue:
