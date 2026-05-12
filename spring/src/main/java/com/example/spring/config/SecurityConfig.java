@@ -96,6 +96,8 @@ public class SecurityConfig {
                 "https://127.0.0.1:5175",
                 "https://dev.dorder-api.shop",
                 "http://dev.dorder-api.shop",
+                "https://prod.dorder-api.shop",
+                "http://prod.dorder-api.shop",
                 "https://admin.dorder-api.shop",
                 "https://customer.dorder-api.shop",
                 "https://server.dorder-api.shop"
