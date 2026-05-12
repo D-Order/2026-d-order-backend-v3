@@ -4,7 +4,7 @@ from django.utils.timezone import now
 
 class TableGroup(models.Model):
     """테이블 병합 그룹 모델"""
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     representative_table = models.ForeignKey(
         'Table',
         on_delete=models.SET_NULL,
@@ -25,7 +25,7 @@ class TableGroup(models.Model):
         return f"[그룹 {self.pk}] (대표 테이블 없음)"
 
 class Table(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     booth = models.ForeignKey('booth.Booth', on_delete=models.CASCADE, related_name='tables')
     table_num = models.IntegerField()
 
@@ -53,7 +53,7 @@ class Table(models.Model):
         return f"[{self.booth.name}] 테이블 {self.table_num} ({self.get_status_display()})"
     
 class TableUsage(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='usages')
     started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
