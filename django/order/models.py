@@ -79,6 +79,7 @@ class OrderItem(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     cooked_at = models.DateTimeField(null=True, blank=True)
     served_at = models.DateTimeField(null=True, blank=True)
+    key = models.CharField(max_length=255, null=True, blank=True)
 
     class Meta:
         db_table = "orderitem"
