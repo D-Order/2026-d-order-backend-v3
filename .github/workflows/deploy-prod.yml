@@ -227,10 +227,11 @@ jobs:
                 keepalive 32;
             }
             UPCONF
-              docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+              docker compose -f docker-compose.prod.yml pull nginx
+              docker compose -f docker-compose.prod.yml up -d --no-deps --wait nginx
 
               # 전환 후 헬스 확인
-              sleep 3
+              sleep 5
               curl -sf http://localhost/health/django || exit 1
               curl -sf http://localhost/health/spring || exit 1
 
