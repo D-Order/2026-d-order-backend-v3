@@ -16,6 +16,16 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 # ==================================================================
+# 로깅 설정
+# ==================================================================
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %highlight(%-5level) [%15.15thread] %cyan(%-40.40logger{39}) : %msg%n"
+  level:
+    root: INFO
+    com.example.spring: DEBUG
+
+# ==================================================================
 # JWT 설정 (Django에서 발급한 토큰 검증용)
 # ==================================================================
 jwt:
