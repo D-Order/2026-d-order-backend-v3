@@ -114,6 +114,11 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
+jwt:
+  cookie:
+    secure: true
+    same-site: 'None' # Netlify 등 외부 도메인 프론트에서 cross-site 쿠키 허용
+
 ---
 # ==================================================================
 # prod 환경 전용 설정 (Docker 컨테이너용)

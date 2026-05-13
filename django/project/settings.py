@@ -410,6 +410,11 @@ def get_cors_origins():
 
 CORS_ALLOWED_ORIGINS = get_cors_origins()
 
+if not IS_PRODUCTION:
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"https://.*\.netlify\.app",
+    ]
+
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'booth-id',
 ]
@@ -425,7 +430,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 CSRF_COOKIE_NAME = 'csrftoken'              # 쿠키 이름
 CSRF_COOKIE_SECURE = env.bool('CSRF_COOKIE_SECURE', default=not IS_LOCAL)
 CSRF_COOKIE_HTTPONLY = False                # JavaScript에서 접근 가능 (React에서 필요)
-CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'None' if IS_DEVELOPMENT else 'Lax'
 CSRF_COOKIE_DOMAIN = None if IS_LOCAL else ('dev.dorder-api.shop' if IS_DEVELOPMENT else '.dorder-api.shop')
 
 SESSION_COOKIE_SECURE = env.bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
