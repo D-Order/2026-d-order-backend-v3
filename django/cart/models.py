@@ -26,11 +26,11 @@ class Cart(models.Model):
     round = models.IntegerField(default=0)
 
     def is_pending_expired(self) -> bool:
-        return (
-            self.status == self.Status.PENDING
-            and self.pending_expires_at is not None
-            and self.pending_expires_at < timezone.now()
-        )
+        """
+        결제 대기 3분 만료 정책 제거.
+        pending_payment는 자동 만료되지 않는다.
+        """
+        return False
 
     def __str__(self):
         return f"Cart(table_usage={self.table_usage_id}, status={self.status})"
