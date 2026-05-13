@@ -82,7 +82,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SECURE_SSL_REDIRECT: 'True'
+      SECURE_SSL_REDIRECT: 'False'  # nginx가 SSL 처리하므로 Django 내부 리다이렉트 불필요
       CSRF_COOKIE_SECURE: 'True'
       SESSION_COOKIE_SECURE: 'True'
       SESSION_COOKIE_HTTPONLY: 'True'
@@ -132,7 +132,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SECURE_SSL_REDIRECT: 'True'
+      SECURE_SSL_REDIRECT: 'False'  # nginx가 SSL 처리하므로 Django 내부 리다이렉트 불필요
       CSRF_COOKIE_SECURE: 'True'
       SESSION_COOKIE_SECURE: 'True'
       SESSION_COOKIE_HTTPONLY: 'True'
@@ -165,7 +165,7 @@ services:
     image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
     container_name: d-order-spring-blue-prod
     profiles: ['blue']
-    command: ["--spring.profiles.active=prod"]
+    command: ['--spring.profiles.active=prod']
     environment:
       SPRING_PROFILES_ACTIVE: prod
       POSTGRES_DB: ${POSTGRES_DB}
@@ -205,7 +205,7 @@ services:
     image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
     container_name: d-order-spring-green-prod
     profiles: ['green']
-    command: ["--spring.profiles.active=prod"]
+    command: ['--spring.profiles.active=prod']
     environment:
       SPRING_PROFILES_ACTIVE: prod
       POSTGRES_DB: ${POSTGRES_DB}
