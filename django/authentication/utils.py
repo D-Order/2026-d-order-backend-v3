@@ -13,6 +13,8 @@ _STALE_COOKIE_DOMAINS = (
     'dorder-api.shop',
     'dev.dorder-api.shop',
     '.dev.dorder-api.shop',
+    'prod.dorder-api.shop',
+    '.prod.dorder-api.shop',
 )
 _STALE_COOKIE_NAMES = ('csrftoken', 'sessionid', 'access_token', 'refresh_token')
 
