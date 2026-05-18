@@ -21,30 +21,30 @@ public class CookieUtil {
      */
     public void setJwtCookies(HttpServletResponse response, String accessToken, String refreshToken) {
         // Access Token 쿠키
-        ResponseCookie accessCookie = ResponseCookie.from(
-                        jwtProperties.getCookie().getAccessTokenName(),
-                        accessToken
-                )
-                .maxAge(jwtProperties.getAccessTokenExpiration() / 1000)
-                .httpOnly(jwtProperties.getCookie().isHttpOnly())
-                .sameSite(jwtProperties.getCookie().getSameSite())
-                .secure(jwtProperties.getCookie().isSecure())
-                .domain(jwtProperties.getCookie().getDomain())
-                .path("/")
-                .build();
+        ResponseCookie accessCookie = applyDomain(
+                ResponseCookie.from(
+                                jwtProperties.getCookie().getAccessTokenName(),
+                                accessToken
+                        )
+                        .maxAge(jwtProperties.getAccessTokenExpiration() / 1000)
+                        .httpOnly(jwtProperties.getCookie().isHttpOnly())
+                        .sameSite(jwtProperties.getCookie().getSameSite())
+                        .secure(jwtProperties.getCookie().isSecure())
+                        .path("/")
+        ).build();
 
         // Refresh Token 쿠키
-        ResponseCookie refreshCookie = ResponseCookie.from(
-                        jwtProperties.getCookie().getRefreshTokenName(),
-                        refreshToken
-                )
-                .maxAge(jwtProperties.getRefreshTokenExpiration() / 1000)
-                .httpOnly(jwtProperties.getCookie().isHttpOnly())
-                .sameSite(jwtProperties.getCookie().getSameSite())
-                .secure(jwtProperties.getCookie().isSecure())
-                .domain(jwtProperties.getCookie().getDomain())
-                .path("/")
-                .build();
+        ResponseCookie refreshCookie = applyDomain(
+                ResponseCookie.from(
+                                jwtProperties.getCookie().getRefreshTokenName(),
+                                refreshToken
+                        )
+                        .maxAge(jwtProperties.getRefreshTokenExpiration() / 1000)
+                        .httpOnly(jwtProperties.getCookie().isHttpOnly())
+                        .sameSite(jwtProperties.getCookie().getSameSite())
+                        .secure(jwtProperties.getCookie().isSecure())
+                        .path("/")
+        ).build();
 
         response.addHeader("Set-Cookie", accessCookie.toString());
         response.addHeader("Set-Cookie", refreshCookie.toString());
@@ -55,33 +55,45 @@ public class CookieUtil {
      */
     public void deleteJwtCookies(HttpServletResponse response) {
         // Access Token 쿠키 삭제
-        ResponseCookie accessCookie = ResponseCookie.from(
-                        jwtProperties.getCookie().getAccessTokenName(),
-                        ""
-                )
-                .maxAge(0)
-                .httpOnly(jwtProperties.getCookie().isHttpOnly())
-                .sameSite(jwtProperties.getCookie().getSameSite())
-                .secure(jwtProperties.getCookie().isSecure())
-                .domain(jwtProperties.getCookie().getDomain())
-                .path("/")
-                .build();
+        ResponseCookie accessCookie = applyDomain(
+                ResponseCookie.from(
+                                jwtProperties.getCookie().getAccessTokenName(),
+                                ""
+                        )
+                        .maxAge(0)
+                        .httpOnly(jwtProperties.getCookie().isHttpOnly())
+                        .sameSite(jwtProperties.getCookie().getSameSite())
+                        .secure(jwtProperties.getCookie().isSecure())
+                        .path("/")
+        ).build();
 
         // Refresh Token 쿠키 삭제
-        ResponseCookie refreshCookie = ResponseCookie.from(
-                        jwtProperties.getCookie().getRefreshTokenName(),
-                        ""
-                )
-                .maxAge(0)
-                .httpOnly(jwtProperties.getCookie().isHttpOnly())
-                .sameSite(jwtProperties.getCookie().getSameSite())
-                .secure(jwtProperties.getCookie().isSecure())
-                .domain(jwtProperties.getCookie().getDomain())
-                .path("/")
-                .build();
+        ResponseCookie refreshCookie = applyDomain(
+                ResponseCookie.from(
+                                jwtProperties.getCookie().getRefreshTokenName(),
+                                ""
+                        )
+                        .maxAge(0)
+                        .httpOnly(jwtProperties.getCookie().isHttpOnly())
+                        .sameSite(jwtProperties.getCookie().getSameSite())
+                        .secure(jwtProperties.getCookie().isSecure())
+                        .path("/")
+        ).build();
 
         response.addHeader("Set-Cookie", accessCookie.toString());
         response.addHeader("Set-Cookie", refreshCookie.toString());
+    }
+
+    /**
+     * domain 값이 비어있으면 .domain() 호출을 생략하여 Domain attr 자체를 빼버린다.
+     * (host-only 쿠키: 서브도메인 간 쿠키 누적/충돌 방지)
+     */
+    private ResponseCookie.ResponseCookieBuilder applyDomain(ResponseCookie.ResponseCookieBuilder builder) {
+        String domain = jwtProperties.getCookie().getDomain();
+        if (domain != null && !domain.isEmpty()) {
+            builder.domain(domain);
+        }
+        return builder;
     }
 
     /**

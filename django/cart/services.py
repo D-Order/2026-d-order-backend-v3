@@ -11,7 +11,6 @@ from menu.models import *
 from order.models import *
 from .models import *
 
-PENDING_TTL_MINUTES = 3
 
 class CartError(Exception):
     def __init__(self, message, error_code="CART_ERROR", detail=None, available_stock=None, status_code=400):
@@ -82,15 +81,6 @@ def _ensure_table_usage_alive(table_usage: TableUsage):
     if table_usage.ended_at is not None:
         raise CartError("이미 종료된 세션입니다.", "TABLE_USAGE_ENDED", status_code=410)
 
-
-def _restore_if_pending_expired(cart: Cart) -> bool:
-    if not cart.is_pending_expired():
-        return False
-
-    cart.status = Cart.Status.ACTIVE
-    cart.pending_expires_at = None
-    cart.save(update_fields=["status", "pending_expires_at"])
-    return True
 
 
 def _sync_item_prices_to_latest(cart: Cart) -> None:
@@ -280,21 +270,6 @@ def get_or_create_cart_by_table_usage(table_usage_id: int) -> Cart:
 
     cart, _ = Cart.objects.select_for_update().get_or_create(table_usage=table_usage)
 
-    restored = _restore_if_pending_expired(cart)
-
-    if restored:
-        final_table_usage_id = cart.table_usage_id
-
-        from .services_ws import broadcast_cart_event
-
-        transaction.on_commit(
-            lambda: broadcast_cart_event(
-                table_usage_id=final_table_usage_id,
-                event_type="CART_PENDING_EXPIRED",
-                message="결제 대기 시간이 만료되어 장바구니가 다시 활성화되었습니다.",
-            )
-        )
-
     return cart
 
 @transaction.atomic
@@ -328,13 +303,6 @@ def add_to_cart(*, table_usage_id: int, type: str, quantity: int, menu_id: int =
                 raise CartError(
                     "이용료 메뉴만 fee 타입으로 담을 수 있습니다.",
                     "INVALID_FEE_MENU",
-                    status_code=400,
-                )
-
-            if not _can_add_fee_in_this_round(cart):
-                raise CartError(
-                    "자리비는 첫 주문에서만 담을 수 있습니다.",
-                    "FEE_ONLY_FIRST_ROUND",
                     status_code=400,
                 )
 
@@ -466,13 +434,6 @@ def update_item_quantity(*, table_usage_id: int, cart_item_id: int, quantity: in
         )
 
         if menu.category == Menu.Category.FEE:
-            if not _can_add_fee_in_this_round(cart):
-                raise CartError(
-                    "자리비는 첫 주문에서만 수정할 수 있습니다.",
-                    "FEE_ONLY_FIRST_ROUND",
-                    status_code=400,
-                )
-
             _validate_fee_quantity_policy(booth=booth, quantity=quantity)
             item.price_at_cart = int(menu.price)
 
@@ -581,7 +542,7 @@ def enter_payment_info(*, table_usage_id: int):
     total = subtotal - discount_total
 
     cart.status = Cart.Status.PENDING
-    cart.pending_expires_at = timezone.now() + timedelta(minutes=PENDING_TTL_MINUTES)
+    cart.pending_expires_at = None
     cart.save(update_fields=["status", "pending_expires_at"])
 
     booth = cart.table_usage.table.booth

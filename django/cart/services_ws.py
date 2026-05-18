@@ -111,7 +111,21 @@ def build_cart_snapshot_data(table_usage_id: int):
 def broadcast_cart_event(table_usage_id: int, event_type: str, message: str):
     channel_layer = get_channel_layer()
     group_name = f"table_usage_{table_usage_id}.cart"
-    payload = build_cart_snapshot_data(table_usage_id)
+
+    try:
+        payload = build_cart_snapshot_data(table_usage_id)
+
+    except Exception as e:
+        logger.warning(
+            f"[Cart WS] broadcast snapshot build failed: "
+            f"table_usage_id={table_usage_id}, event_type={event_type}, error={e}"
+        )
+
+        payload = {
+            "table_usage_id": table_usage_id,
+            "snapshot_available": False,
+            "error": str(e),
+        }
 
     async_to_sync(channel_layer.group_send)(
         group_name,
