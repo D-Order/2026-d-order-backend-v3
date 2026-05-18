@@ -82,7 +82,9 @@ public class ServingTaskService {
                 if (item == null || item.getId() == null || item.getName() == null) {
                     continue;
                 }
-                menus.add(new ServingMenuFilterOption(item.getId(), item.getName()));
+                String category = item.getCategory();
+                boolean isSetMenu = category != null && "SET".equalsIgnoreCase(category);
+                menus.add(new ServingMenuFilterOption(item.getId(), item.getName(), category, isSetMenu));
             }
         }
 
