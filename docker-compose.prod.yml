@@ -13,9 +13,6 @@ services:
       - certbot_certs:/etc/letsencrypt:ro
       - static_volume_prod:/app/static:ro
       - nginx_logs_prod:/var/log/nginx
-    depends_on:
-      - django-blue
-      - spring-blue
     healthcheck:
       test:
         [
@@ -41,6 +38,34 @@ services:
       - certbot_www:/var/www/certbot
       - certbot_certs:/etc/letsencrypt
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - d-order-network-prod
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: d-order-postgres-prod
+    # 필수 env가 비어 있으면 컨테이너를 띄우지 않음 (빈 비밀번호로 유저가 생성되는 사고 방지)
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB not set}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER not set}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD not set}
+      POSTGRES_INITDB_ARGS: -U postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+      SPRING_DB_USER: ${SPRING_DB_USER:?SPRING_DB_USER not set}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:?SPRING_DB_PASSWORD not set}
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./db-scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - d-order-network-prod
     restart: unless-stopped
@@ -77,12 +102,12 @@ services:
       DB_NAME: ${POSTGRES_DB}
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SECURE_SSL_REDIRECT: 'True'
+      SECURE_SSL_REDIRECT: 'False'  # nginx가 SSL 처리하므로 Django 내부 리다이렉트 불필요
       CSRF_COOKIE_SECURE: 'True'
       SESSION_COOKIE_SECURE: 'True'
       SESSION_COOKIE_HTTPONLY: 'True'
@@ -90,13 +115,17 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+      CUSTOMER_FRONT_BASE_URL: ${CUSTOMER_FRONT_BASE_URL}
     expose:
       - '8000'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
       - static_volume_prod:/app/static
+      - django_logs_prod:/app/logs
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
       interval: 15s
@@ -105,7 +134,9 @@ services:
       retries: 3
     stop_grace_period: 30s
     networks:
-      - d-order-network-prod
+      d-order-network-prod:
+        aliases:
+          - django-active
     restart: unless-stopped
 
   django-green:
@@ -124,12 +155,12 @@ services:
       DB_NAME: ${POSTGRES_DB}
       DB_USER: ${POSTGRES_USER}
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      DB_HOST: postgres
       DB_PORT: 5432
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SECURE_SSL_REDIRECT: 'True'
+      SECURE_SSL_REDIRECT: 'False'  # nginx가 SSL 처리하므로 Django 내부 리다이렉트 불필요
       CSRF_COOKIE_SECURE: 'True'
       SESSION_COOKIE_SECURE: 'True'
       SESSION_COOKIE_HTTPONLY: 'True'
@@ -137,13 +168,17 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME}
+      CUSTOMER_FRONT_BASE_URL: ${CUSTOMER_FRONT_BASE_URL}
     expose:
       - '8000'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
       - static_volume_prod:/app/static
+      - django_logs_prod:/app/logs
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
       interval: 15s
@@ -152,20 +187,22 @@ services:
       retries: 3
     stop_grace_period: 30s
     networks:
-      - d-order-network-prod
+      d-order-network-prod:
+        aliases:
+          - django-active
     restart: unless-stopped
 
   spring-blue:
     image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
     container_name: d-order-spring-blue-prod
     profiles: ['blue']
-    command: ["--spring.profiles.active=prod"]
+    command: ['--spring.profiles.active=prod']
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      POSTGRES_DB: ${POSTGRES_DB}
-      SPRING_DB_USER: ${SPRING_DB_USER}
-      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB not set}
+      SPRING_DB_USER: ${SPRING_DB_USER:?SPRING_DB_USER not set}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:?SPRING_DB_PASSWORD not set}
+      DB_HOST: postgres
       SECRET_KEY: ${SECRET_KEY}
       DJANGO_API_URL: ${DJANGO_API_URL}
       REDIS_HOST: redis
@@ -174,6 +211,8 @@ services:
     expose:
       - '8080'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -199,13 +238,13 @@ services:
     image: ${DOCKER_USERNAME:-local}/d-order-spring:prod
     container_name: d-order-spring-green-prod
     profiles: ['green']
-    command: ["--spring.profiles.active=prod"]
+    command: ['--spring.profiles.active=prod']
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      POSTGRES_DB: ${POSTGRES_DB}
-      SPRING_DB_USER: ${SPRING_DB_USER}
-      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD}
-      DB_HOST: ${DB_HOST}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB not set}
+      SPRING_DB_USER: ${SPRING_DB_USER:?SPRING_DB_USER not set}
+      SPRING_DB_PASSWORD: ${SPRING_DB_PASSWORD:?SPRING_DB_PASSWORD not set}
+      DB_HOST: postgres
       SECRET_KEY: ${SECRET_KEY}
       DJANGO_API_URL: ${DJANGO_API_URL}
       REDIS_HOST: redis
@@ -214,6 +253,8 @@ services:
     expose:
       - '8080'
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     healthcheck:
@@ -236,11 +277,15 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data_prod:
+    driver: local
   redis_data_prod:
     driver: local
   static_volume_prod:
     driver: local
   nginx_logs_prod:
+    driver: local
+  django_logs_prod:
     driver: local
   certbot_www:
     driver: local

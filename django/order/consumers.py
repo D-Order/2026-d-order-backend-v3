@@ -24,6 +24,9 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
       ④ ADMIN_ORDER_CANCELLED – 주문 취소
       ⑤ ORDER_COMPLETED       – 전체 서빙 완료
       ⑥ MENU_AGGREGATION      – 메뉴별 실시간 집계
+      ⑦ TOTAL_SALES_UPDATE    – 총매출 갱신
+      ⑧ ADMIN_TABLE_RESET     – 테이블 초기화 (주문 갱신)
+      ⑨ ADMIN_TABLE_MERGE     – 테이블 병합 (주문 갱신)
     """
 
     # ───────────────────────────────────────────
@@ -121,14 +124,16 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 logger.warning(f"✅ [Order WS] 주문 조회 성공 - order_id={order_id}")
                 serialized = await self._serialize_order(order)
                 total_sales = await self._get_total_sales()
-                await self.send_json({
-                    "type": "ADMIN_NEW_ORDER",
-                    "timestamp": timezone.localtime().isoformat(),
-                    "data": {
-                        "total_sales": total_sales,
-                        "orders": [serialized],
-                    },
-                })
+                # FEE only 주문은 대시보드에 표시하지 않음
+                if serialized["items"]:
+                    await self.send_json({
+                        "type": "ADMIN_NEW_ORDER",
+                        "timestamp": timezone.localtime().isoformat(),
+                        "data": {
+                            "total_sales": total_sales,
+                            "orders": [serialized],
+                        },
+                    })
                 await self.send_menu_aggregation()
                 return
             else:
@@ -145,6 +150,7 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 "orders": [],
             },
         })
+        await self.send_menu_aggregation()
 
     # ───────────────────────────────────────────
     # ③ ADMIN_ORDER_UPDATE (group_send handler)
@@ -204,8 +210,15 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         음식(MENU) / 음료(DRINK)로 분류, 수량 내림차순 → 이름 오름차순.
         """
         aggregation = await self._get_menu_aggregation()
+        logger.warning(
+            "📊 [Order WS] MENU_AGGREGATION 전송 - booth_id=%s, food=%s, drink=%s",
+            self.booth_id,
+            len(aggregation.get("food_summary", [])),
+            len(aggregation.get("beverage_summary", [])),
+        )
         await self.send_json({
             "type": "MENU_AGGREGATION",
+            "timestamp": timezone.localtime().isoformat(),
             "data": aggregation,
         })
 
@@ -217,13 +230,20 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
     # Private: DB 조회 / 직렬화
     # ───────────────────────────────────────────
     async def _get_active_orders(self):
-        """해당 부스의 PAID 상태 주문을 오래된 순으로 조회"""
+        """해당 부스의 PAID 상태 주문을 오래된 순으로 조회 (종료된 테이블 제외)"""
         def _query():
             logger.warning(f"🔍 [Order WS] DB 조회 - booth_id={self.booth_id}")
+            from django.db.models import Q
             qs = Order.objects.filter(
                 order_status="PAID",
                 table_usage__table__booth_id=self.booth_id,
-            ).select_related("table_usage__table").order_by("created_at")
+                table_usage__ended_at__isnull=True,
+                # FEE 외 아이템이 하나라도 있는 주문만 (FEE only 주문 제외)
+                items__parent__isnull=True,
+            ).filter(
+                Q(items__setmenu__isnull=False) |
+                Q(items__menu__category__in=["MENU", "DRINK"])
+            ).distinct().select_related("table_usage__table").order_by("created_at")
             count = qs.count()
             logger.warning(f"🔍 [Order WS] DB 결과: {count}개 주문")
             return list(qs)
@@ -236,28 +256,31 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
         리프 아이템만 대상 (세트메뉴 부모 제외, 자식 OrderItem + 일반 메뉴).
         조리중(COOKING) 상태인 것만 대상. 조리완료되면 집계에서 제외됨.
         """
-        active_statuses = ["COOKING"]  # 조리중인 것만
+        active_statuses = ["COOKING", "cooking"]  # 대소문자 혼용 대응
 
         def _query():
-            # 리프 아이템: menu가 있고, 세트메뉴 부모(parent=None, setmenu≠None)가 아닌 것
+            # 리프 아이템만 집계: 메뉴가 있는 아이템들 (세트메뉴 부모 제외, 자식 + 일반 메뉴)
             # FEE 카테고리는 제외 (테이블 이용료는 메뉴 집계에서 제외)
             qs = (
                 OrderItem.objects
                 .filter(
                     order__order_status="PAID",
                     order__table_usage__table__booth_id=self.booth_id,
+                    order__table_usage__ended_at__isnull=True,  # 초기화된 테이블 제외
                     status__in=active_statuses,
-                    menu__isnull=False,
+                    menu__isnull=False,  # 세트메뉴 부모(menu=None) 자동 제외, 자식·일반 포함
                 )
-                .exclude(parent__isnull=True, setmenu__isnull=False)
                 .exclude(menu__category="FEE")
                 .select_related("menu")
             )
+
+            qs_count = qs.count()
 
             food_map = {}
             drink_map = {}
 
             for item in qs:
+                # 일반 메뉴 또는 세트메뉴 구성품의 메뉴 이름
                 name = item.menu.name
                 category = item.menu.category
                 target = drink_map if category == "DRINK" else food_map
@@ -274,6 +297,14 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                 {"menu_name": k, "total_quantity": v}
                 for k, v in sorted(drink_map.items(), key=sort_key)
             ]
+
+            logger.warning(
+                "📊 [Order WS] MENU_AGGREGATION 조회 - booth_id=%s, qs=%s, food=%s, drink=%s",
+                self.booth_id,
+                qs_count,
+                food_summary,
+                beverage_summary,
+            )
 
             return {
                 "food_summary": food_summary,
@@ -293,6 +324,72 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
     async def total_sales_update(self, event):
         """총매출 갱신 이벤트 수신 → 매출 consumer에 위임하지 않고 직접 무시"""
         pass
+
+    # ───────────────────────────────────────────
+    # ⑧ ADMIN_TABLE_RESET (group_send handler)
+    # ───────────────────────────────────────────
+    async def admin_table_reset(self, event):
+        """테이블 초기화 이벤트 수신 → 초기화된 테이블을 제외한 현재 주문 목록 재전송"""
+        data = event.get("data", {})
+        table_nums = data.get("table_nums", [])
+        logger.warning(f"🔄 [Order WS] 테이블 초기화 - table_nums={table_nums}")
+        
+        # 현재 활성 주문 목록 재조회 (ended_at이 NULL인 테이블만)
+        orders = await self._get_active_orders()
+        logger.warning(f"🔄 [Order WS] 재조회됨: {len(orders)}개 주문")
+        
+        serialized_orders = []
+        for order in orders:
+            serialized_orders.append(await self._serialize_order(order))
+
+        total_sales = await self._get_total_sales()
+
+        # 클라이언트로 업데이트된 주문 목록 전송
+        await self.send_json({
+            "type": "ADMIN_TABLE_RESET",
+            "timestamp": timezone.localtime().isoformat(),
+            "data": {
+                "table_nums": table_nums,
+                "count": data.get("count", 0),
+                "total_sales": total_sales,
+                "orders": serialized_orders,  # ← 현재 활성 주문들
+            },
+        })
+        await self.send_menu_aggregation()
+
+    # ───────────────────────────────────────────
+    # ⑨ ADMIN_TABLE_MERGE (group_send handler)
+    # ───────────────────────────────────────────
+    async def admin_table_merge(self, event):
+        """테이블 병합 이벤트 수신 → 현재 주문 목록 재전송 (병합되지 않은 테이블들)"""
+        data = event.get("data", {})
+        table_nums = data.get("table_nums", [])
+        representative_table = data.get("representative_table")
+        logger.warning(f"🔗 [Order WS] 테이블 병합 - table_nums={table_nums}, rep={representative_table}")
+        
+        # 현재 활성 주문 목록 재조회 (ended_at이 NULL인 테이블만)
+        orders = await self._get_active_orders()
+        logger.warning(f"🔗 [Order WS] 재조회됨: {len(orders)}개 주문")
+        
+        serialized_orders = []
+        for order in orders:
+            serialized_orders.append(await self._serialize_order(order))
+
+        total_sales = await self._get_total_sales()
+
+        # 클라이언트로 업데이트된 주문 목록 전송
+        await self.send_json({
+            "type": "ADMIN_TABLE_MERGE",
+            "timestamp": timezone.localtime().isoformat(),
+            "data": {
+                "table_nums": table_nums,
+                "representative_table": representative_table,
+                "count": data.get("count", 0),
+                "total_sales": total_sales,
+                "orders": serialized_orders,  # ← 현재 활성 주문들
+            },
+        })
+        await self.send_menu_aggregation()
 
     async def _serialize_order(self, order):
         """Order 객체 → API 스펙 JSON (세트메뉴는 자식 OrderItem 개별 조회)"""
@@ -321,12 +418,12 @@ class AdminOrderManagementConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsu
                     # 세트메뉴 → 자식 OrderItem 개별 직렬화
                     set_menu_name = item.setmenu.name
                     for child in item.children.all():
-                        menu_name = child.menu.name if child.menu else "알 수 없음"
-                        image = child.menu.image.url if child.menu and child.menu.image else None
+                        child_menu_name = child.menu.name if child.menu else "알 수 없음"
+                        child_image = child.menu.image.url if child.menu and child.menu.image else None
                         items.append({
                             "order_item_id": child.id,
-                            "menu_name": menu_name,
-                            "image": image,
+                            "menu_name": child_menu_name,
+                            "image": child_image,
                             "quantity": child.quantity,
                             "fixed_price": item.fixed_price,
                             "item_total_price": item.fixed_price * item.quantity,
@@ -458,6 +555,7 @@ class BoothSalesConsumer(KoreanAsyncJsonMixin, AsyncJsonWebsocketConsumer):
         pass
 
     async def admin_menu_aggregation(self, event):
+        # BoothSalesConsumer는 메뉴 집계를 다루지 않음
         pass
 
     async def _get_today_revenue(self):

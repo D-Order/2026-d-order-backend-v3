@@ -21,11 +21,26 @@ class CouponCreateSerializer(serializers.Serializer):
         dv: Decimal = attrs["discount_value"]
 
         if dt == "RATE":
-            if not (Decimal("0") < dv < Decimal("1")):
-                raise serializers.ValidationError({"discount_value": "RATE는 0보다 크고 1보다 작아야 합니다."})
+            if dv <= Decimal("0"):
+                raise serializers.ValidationError(
+                    {"discount_value": "RATE는 0보다 커야 합니다."}
+                )
+
+            if dv >= Decimal("1"):
+                if dv > Decimal("100"):
+                    raise serializers.ValidationError(
+                        {"discount_value": "RATE는 100 이하의 값이어야 합니다."}
+                    )
+                attrs["discount_value"] = dv / Decimal("100")
+
+            elif dv < Decimal("1"):
+                attrs["discount_value"] = dv
+
         else:
             if dv < Decimal("1"):
-                raise serializers.ValidationError({"discount_value": "AMOUNT는 1 이상이어야 합니다."})
+                raise serializers.ValidationError(
+                    {"discount_value": "AMOUNT는 1 이상이어야 합니다."}
+                )
 
         return attrs
 

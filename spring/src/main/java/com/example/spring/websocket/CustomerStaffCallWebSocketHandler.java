@@ -16,6 +16,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -59,6 +60,10 @@ public class CustomerStaffCallWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         JsonNode root = objectMapper.readTree(message.getPayload());
         String type = root.path("type").asText("");
+        if ("PING".equalsIgnoreCase(type)) {
+            sendHeartbeatPong(session);
+            return;
+        }
         if (!"SUBSCRIBE".equalsIgnoreCase(type)) {
             return;
         }
@@ -130,6 +135,33 @@ public class CustomerStaffCallWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    public void broadcastDeleted(Long staffCallId) {
+        Set<WebSocketSession> sessions = staffCallSessions.get(staffCallId);
+        if (sessions == null || sessions.isEmpty()) return;
+
+        try {
+            String json = objectMapper.writeValueAsString(Map.of(
+                    "type", "STAFF_CALL_STATUS",
+                    "staff_call_id", staffCallId,
+                    "status", "DELETED"
+            ));
+            TextMessage tm = new TextMessage(json);
+            for (WebSocketSession s : sessions) {
+                if (s.isOpen()) {
+                    try {
+                        s.sendMessage(tm);
+                    } catch (IOException e) {
+                        log.warn("[customer staffcall ws] 삭제 전송 실패 session={}", s.getId(), e);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("[customer staffcall ws] broadcastDeleted 실패 staffCallId={}", staffCallId, e);
+        } finally {
+            staffCallSessions.remove(staffCallId);
+        }
+    }
+
     private Map<String, Object> statusEvent(StaffCall sc) {
         Map<String, Object> out = new HashMap<>();
         out.put("type", "STAFF_CALL_STATUS");
@@ -155,8 +187,25 @@ public class CustomerStaffCallWebSocketHandler extends TextWebSocketHandler {
         return token;
     }
 
+    public boolean isValidSubscribeToken(Long staffCallId, String token) {
+        if (staffCallId == null || staffCallId <= 0) return false;
+        if (token == null || token.isBlank()) return false;
+        String expected = getSubscribeToken(staffCallId);
+        return expected != null && expected.equals(token);
+    }
+
     private String getSubscribeToken(Long staffCallId) {
         return redisTemplate.opsForValue().get(REDIS_SUBSCRIBE_TOKEN_KEY_PREFIX + staffCallId);
+    }
+
+    /** Django cart WS와 동일한 JSON 하트비트 응답 (연결 유지·유휴 끊김 완화). */
+    private void sendHeartbeatPong(WebSocketSession session) throws IOException {
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "PONG");
+        body.put("timestamp", OffsetDateTime.now().toString());
+        body.put("message", "heartbeat");
+        body.put("data", null);
+        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(body)));
     }
 }
 

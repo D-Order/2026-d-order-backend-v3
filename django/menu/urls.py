@@ -12,5 +12,5 @@ urlpatterns = [
     
     # 전체 메뉴판 조회
     path('menu-list/', BoothMenuListAPIView.as_view(), name='booth-menu-list'),
-    path('<int:booth_id>/menu-list/', UserMenuListAPIView.as_view()),
+    path('<uuid:booth_uuid>/menu-list/', UserMenuListAPIView.as_view()),
 ]

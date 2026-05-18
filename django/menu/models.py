@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from booth.models import Booth
+from utils.image import generate_menu_image_path, generate_setmenu_image_path
 
 
 class Menu(models.Model):
@@ -32,7 +33,7 @@ class Menu(models.Model):
         default=0,
         validators=[MinValueValidator(0)]
     )
-    image = models.ImageField(upload_to='menu_images/', blank=True, null=True)
+    image = models.ImageField(upload_to=generate_menu_image_path, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -63,7 +64,7 @@ class SetMenu(models.Model):
     )
     description = models.CharField(max_length=30, blank=True, null=True)
     price = models.IntegerField(validators=[MinValueValidator(0)])
-    image = models.ImageField(upload_to='setmenu_images/', blank=True, null=True)
+    image = models.ImageField(upload_to=generate_setmenu_image_path, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -22,14 +22,25 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             @Param("callType") String callType
     );
 
+    List<StaffCall> findByLockedBySessionIdAndStatus(String lockedBySessionId, StaffCallStatus status);
+
     @Query(value = """
             SELECT sc.id, sc.booth_id, sc.table_id, sc.cart_id, sc.table_usage_id, sc.table_num, sc.cart_price,
                    sc.call_type, sc.category,
-                   sc.status, sc.created_at, sc.updated_at, sc.accepted_at, sc.accepted_by, sc.completed_at, sc.version
+                   sc.status, sc.created_at, sc.updated_at, sc.accepted_at, sc.accepted_by, sc.completed_at, sc.version, sc.locked_by_session_id
             FROM staff_call sc
             WHERE sc.booth_id = :boothId
             AND sc.status IN ('PENDING', 'ACCEPTED')
-            ORDER BY sc.created_at DESC
+            ORDER BY
+              CASE
+                WHEN sc.status = 'PENDING' THEN 0
+                ELSE 1
+              END ASC,
+              CASE
+                WHEN sc.status = 'ACCEPTED' THEN sc.accepted_at
+                ELSE sc.created_at
+              END DESC,
+              sc.id DESC
             LIMIT :limit OFFSET :offset
             """, nativeQuery = true)
     List<StaffCall> findActiveCallsForBooth(
@@ -58,5 +69,14 @@ public interface StaffCallRepository extends JpaRepository<StaffCall, Long> {
             Long cartId,
             String callType,
             Collection<StaffCallStatus> statuses
+    );
+
+    /** 테이블 초기화 시 취소 대상: 이미 {@link StaffCallStatus#CANCELLED}인 행은 제외. */
+    @Query("SELECT sc FROM StaffCall sc WHERE sc.boothId = :boothId AND sc.tableNum = :tableNum "
+            + "AND sc.status <> :excludedStatus")
+    List<StaffCall> findForTableResetVoidCandidates(
+            @Param("boothId") Long boothId,
+            @Param("tableNum") Integer tableNum,
+            @Param("excludedStatus") StaffCallStatus excludedStatus
     );
 }

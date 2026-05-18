@@ -1,4 +1,6 @@
 import io
+import uuid
+from datetime import datetime
 from PIL import Image, UnidentifiedImageError
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from rest_framework import serializers
@@ -6,7 +8,7 @@ from rest_framework.exceptions import APIException
 
 
 # 이미지 설정
-MAX_IMAGE_SIZE_MB = 5  # 업로드 최대 용량 (MB)
+MAX_IMAGE_SIZE_MB = 10  # 업로드 최대 용량 (MB)
 MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024
 COMPRESS_QUALITY = 85  # 압축 품질 (1-100)
 MAX_DIMENSION = 1920  # 최대 가로/세로 크기
@@ -27,6 +29,42 @@ class UnsupportedImageFormatException(APIException):
     status_code = 415
     default_detail = '지원하지 않는 파일 형식입니다.'
     default_code = 'UNSUPPORTED_IMAGE_FORMAT'
+
+
+# ==========================================
+# 이미지 파일명 및 경로 생성 함수
+# ==========================================
+
+def generate_menu_image_path(instance, filename):
+    """
+    메뉴 이미지 파일 경로 생성
+    경로: booth_{booth_id}/menu_images/menu_{uuid}.jpg
+    
+    Example: booth_1/menu_images/menu_550e8400-e29b-41d4-a716-446655440000.jpg
+    """
+    try:
+        booth_id = instance.booth_id or instance.booth.pk
+    except (AttributeError, ValueError, TypeError):
+        booth_id = "unknown"
+    
+    unique_filename = f"menu_{uuid.uuid4()}.jpg"
+    return f"booth_{booth_id}/menu_images/{unique_filename}"
+
+
+def generate_setmenu_image_path(instance, filename):
+    """
+    세트메뉴 이미지 파일 경로 생성
+    경로: booth_{booth_id}/setmenu_images/setmenu_{uuid}.jpg
+    
+    Example: booth_1/setmenu_images/setmenu_550e8400-e29b-41d4-a716-446655440000.jpg
+    """
+    try:
+        booth_id = instance.booth_id or instance.booth.pk
+    except (AttributeError, ValueError, TypeError):
+        booth_id = "unknown"
+    
+    unique_filename = f"setmenu_{uuid.uuid4()}.jpg"
+    return f"booth_{booth_id}/setmenu_images/{unique_filename}"
 
 
 def validate_image_size(image):
@@ -91,15 +129,15 @@ def compress_image(image):
     img.save(output, format='JPEG', quality=COMPRESS_QUALITY, optimize=True)
     output.seek(0)
     
-    # 새 파일명 생성 (.jpg로 변경)
-    original_name = image.name.rsplit('.', 1)[0] if '.' in image.name else image.name
-    new_name = f"{original_name}.jpg"
+    # 파일명은 단순하게: upload_to 함수에서 최종 경로를 생성함
+    # compress_image에서는 확장자만 .jpg로 정규화
+    simple_name = "image.jpg"
     
     # InMemoryUploadedFile로 반환
     return InMemoryUploadedFile(
         file=output,
         field_name='image',
-        name=new_name,
+        name=simple_name,
         content_type='image/jpeg',
         size=output.getbuffer().nbytes,
         charset=None

@@ -54,6 +54,10 @@ class Command(BaseCommand):
                 elif domain == "staffcall":
                     self._handle_staffcall_event(booth_id, action, data, channel_layer)
 
+                # ──── Tables 도메인 처리 ────
+                elif domain == "tables":
+                    self._handle_tables_event(booth_id, action, data, channel_layer)
+
                 # ──── 기타 도메인 → WebSocket 브로드캐스트 ────
                 else:
                     group_name = f"booth_{booth_id}.{domain}"
@@ -102,6 +106,24 @@ class Command(BaseCommand):
             {"type": action, "data": data}
         )
 
+    def _handle_tables_event(self, booth_id, action, data, channel_layer):
+        """Tables 도메인 이벤트 분기 처리"""
+        # ws_handlers.py 핸들러 이름과 매핑
+        action_map = {
+            "reset": "reset_table",
+            "merge": "merge_table",
+        }
+        event_type = action_map.get(action, f"table_{action}")
+        group_name = f"booth_{booth_id}.tables"
+
+        self.stdout.write(self.style.SUCCESS(
+            f"[Tables] booth:{booth_id} action:{action} → event_type:{event_type}"
+        ))
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {"type": event_type, "data": data}
+        )
+
     def _handle_order_event(self, booth_id, action, data, channel_layer):
         """Order 도메인 이벤트 분기 처리"""
         from order.services import OrderService
@@ -139,6 +161,22 @@ class Command(BaseCommand):
                 ))
             except Exception as e:
                 self.stderr.write(self.style.ERROR(f"[서빙 {action} 실패] {e}"))
+                import traceback
+                self.stderr.write(traceback.format_exc())
+
+        # 서빙 취소 (롤백): spring:booth:{id}:order:cooked
+        # ServingTask 실패 시 SERVED → COOKED 상태 롤백
+        elif action == "cooked":
+            try:
+                # booth_id를 event_data에 추가하여 전달
+                event_with_booth = {**data, "booth_id": int(booth_id)}
+                result = OrderService.handle_serving_cancelled(event_with_booth)
+                action_desc = "서빙 취소" if result.get("result") == "success" else "서빙 취소 실패"
+                self.stdout.write(self.style.SUCCESS(
+                    f"[{action_desc}] booth:{booth_id} → {result}"
+                ))
+            except Exception as e:
+                self.stderr.write(self.style.ERROR(f"[서빙 취소 실패] booth:{booth_id} → {e}"))
                 import traceback
                 self.stderr.write(traceback.format_exc())
 

@@ -4,7 +4,7 @@ from django.utils.timezone import now
 
 class TableGroup(models.Model):
     """테이블 병합 그룹 모델"""
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     representative_table = models.ForeignKey(
         'Table',
         on_delete=models.SET_NULL,
@@ -25,7 +25,7 @@ class TableGroup(models.Model):
         return f"[그룹 {self.pk}] (대표 테이블 없음)"
 
 class Table(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     booth = models.ForeignKey('booth.Booth', on_delete=models.CASCADE, related_name='tables')
     table_num = models.IntegerField()
 
@@ -53,9 +53,9 @@ class Table(models.Model):
         return f"[{self.booth.name}] 테이블 {self.table_num} ({self.get_status_display()})"
     
 class TableUsage(models.Model):
-    id = models.AutoField(primary_key=True)
+    id = models.BigAutoField(primary_key=True)
     table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='usages')
-    started_at = models.DateTimeField()
+    started_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     usage_minutes = models.IntegerField(null=True, blank=True)
     accumulated_amount = models.IntegerField(null=False,default=0) # 테이블 세션 누적 총액
@@ -67,5 +67,6 @@ class TableUsage(models.Model):
 
     def __str__(self):
         status = '사용중' if self.ended_at is None else f"{self.usage_minutes}분 사용"
-        return f"[{self.table.booth.name}] 테이블 {self.table.table_num} - {self.started_at:%Y-%m-%d %H:%M} ({status}, {self.accumulated_amount:,}원)"
+        started_str = self.started_at.strftime('%Y-%m-%d %H:%M') if self.started_at else '미시작'
+        return f"[{self.table.booth.name}] 테이블 {self.table.table_num} - {started_str} ({status}, {self.accumulated_amount:,}원)"
     

@@ -16,6 +16,16 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
 # ==================================================================
+# 로깅 설정
+# ==================================================================
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %highlight(%-5level) [%15.15thread] %cyan(%-40.40logger{39}) : %msg%n"
+  level:
+    root: INFO
+    com.example.spring: DEBUG
+
+# ==================================================================
 # JWT 설정 (Django에서 발급한 토큰 검증용)
 # ==================================================================
 jwt:
@@ -104,6 +114,11 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
+jwt:
+  cookie:
+    secure: true
+    same-site: 'None' # Netlify 등 외부 도메인 프론트에서 cross-site 쿠키 허용
+
 ---
 # ==================================================================
 # prod 환경 전용 설정 (Docker 컨테이너용)
@@ -127,6 +142,9 @@ spring:
       max-lifetime: 1800000
   jpa:
     hibernate:
+      # 운영 스키마는 Django migration 이 관리. 단 Spring 측 모델 변경 가능성을 위해 update 유지.
+      # validate 는 Spring 엔티티의 FK 컬럼 매핑(_id 접미사 누락) 정리가 끝난 뒤 재도입 예정 (#393).
+      # 매 부팅 시 권한 부족 ALTER WARN 누적은 감수.
       ddl-auto: update
     properties:
       hibernate:

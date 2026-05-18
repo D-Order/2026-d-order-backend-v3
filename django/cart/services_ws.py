@@ -9,7 +9,8 @@ from cart.services import (
     recalc_cart_price,
     _calc_discount,
     _is_fee_booth,         
-    _can_add_fee_in_this_round
+    _can_add_fee_in_this_round,
+    build_cart_item_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -22,26 +23,8 @@ def build_cart_snapshot_data(table_usage_id: int):
 
     items = []
     for it in cart.items.select_related("menu", "setmenu"):
-        if it.menu_id:
-            name = it.menu.name
-            unit_price = int(it.menu.price)
-            is_sold_out = it.menu.stock <= 0
-        else:
-            name = it.setmenu.name
-            unit_price = int(it.setmenu.price)
-            is_sold_out = False
-
-        items.append({
-            "id": it.id,
-            "type": it.type,
-            "menu_id": it.menu_id,
-            "set_menu_id": it.setmenu_id,
-            "name": name,
-            "unit_price": unit_price,
-            "quantity": it.quantity,
-            "line_price": it.line_price,
-            "is_sold_out": is_sold_out,
-        })
+        # 기존 직접 dict 만들던 부분 대신 공통 payload 사용
+        items.append(build_cart_item_payload(it))
 
     subtotal = cart.cart_price
 
@@ -128,7 +111,21 @@ def build_cart_snapshot_data(table_usage_id: int):
 def broadcast_cart_event(table_usage_id: int, event_type: str, message: str):
     channel_layer = get_channel_layer()
     group_name = f"table_usage_{table_usage_id}.cart"
-    payload = build_cart_snapshot_data(table_usage_id)
+
+    try:
+        payload = build_cart_snapshot_data(table_usage_id)
+
+    except Exception as e:
+        logger.warning(
+            f"[Cart WS] broadcast snapshot build failed: "
+            f"table_usage_id={table_usage_id}, event_type={event_type}, error={e}"
+        )
+
+        payload = {
+            "table_usage_id": table_usage_id,
+            "snapshot_available": False,
+            "error": str(e),
+        }
 
     async_to_sync(channel_layer.group_send)(
         group_name,
@@ -137,5 +134,28 @@ def broadcast_cart_event(table_usage_id: int, event_type: str, message: str):
             "event_type": event_type,
             "message": message,
             "data": payload,
+        },
+    )
+
+
+def broadcast_cart_reset_on_table_end(table_usage_id: int):
+    """테이블 초기화로 TableUsage가 종료될 때 발행하는 경량 CART_RESET.
+
+    build_cart_snapshot_data를 거치지 않으므로 ended_at이 이미 채워진 시점에도
+    안전하게 호출할 수 있다.
+    """
+    channel_layer = get_channel_layer()
+    group_name = f"table_usage_{table_usage_id}.cart"
+
+    async_to_sync(channel_layer.group_send)(
+        group_name,
+        {
+            "type": "cart_updated",
+            "event_type": "CART_RESET",
+            "message": "테이블이 초기화되어 장바구니가 종료되었습니다.",
+            "data": {
+                "table_usage_id": table_usage_id,
+                "ended": True,
+            },
         },
     )

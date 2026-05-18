@@ -1,8 +1,10 @@
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from django.db import transaction
 
 from table.models import TableUsage
+from coupon.models import CartCouponApply
 from .models import *
 from .serializers import *
 from .services import (
@@ -17,7 +19,9 @@ from .services import (
     confirm_payment_and_mark_ordered,
     reset_ordered_cart,
     _is_fee_booth,
-    _can_add_fee_in_this_round 
+    _can_add_fee_in_this_round,
+    build_cart_item_payload,
+    _calc_discount,
 )
 from .services_ws import *
 
@@ -59,11 +63,11 @@ class CartAddAPIView(APIView):
         except CartError as e:
             return error_response(e)
         
-        broadcast_cart_event(
+        transaction.on_commit(lambda: broadcast_cart_event(
             table_usage_id=table_usage_id,
             event_type="CART_ITEM_ADDED",
             message="장바구니에 메뉴가 추가되었습니다.",
-        )
+        ))
 
         return Response(
             {
@@ -76,14 +80,7 @@ class CartAddAPIView(APIView):
                         "cart_price": cart.cart_price,
                         "round": cart.round,
                     },
-                    "item": {
-                        "id": item.id,
-                        "type": item.type,
-                        "menu_id": item.menu_id,
-                        "set_menu_id": item.setmenu_id,
-                        "quantity": item.quantity,
-                        "line_price": item.line_price,
-                    },
+                    "item": build_cart_item_payload(item),
                 },
             },
             status=200,
@@ -117,40 +114,42 @@ class CartDetailAPIView(APIView):
 
         items = []
         for it in cart.items.select_related("menu", "setmenu"):
-            if it.menu_id:
-                name = it.menu.name
-                unit_price = int(it.menu.price)
-                is_sold_out = it.menu.stock <= 0
-            else:
-                name = it.setmenu.name
-                unit_price = int(it.setmenu.price)
-                is_sold_out = False
+            items.append(build_cart_item_payload(it))   # 여기 수정
 
-            items.append(
-                {
-                    "id": it.id,
-                    "type": it.type,
-                    "menu_id": it.menu_id,
-                    "set_menu_id": it.setmenu_id,
-                    "name": name,
-                    "unit_price": unit_price,
-                    "quantity": it.quantity,
-                    "line_price": it.line_price,
-                    "is_sold_out": is_sold_out,
-                }
-            )
-
+        subtotal = cart.cart_price
+        discount_total = 0
         coupon = {
             "applied": False,
             "coupon_id": None,
             "coupon_code": None,
             "discount_type": None,
             "discount_value": None,
-            "discount_amount": None,
+            "discount_amount": 0,
         }
 
-        subtotal = cart.cart_price
-        discount_total = 0
+        applied = (
+            CartCouponApply.objects
+            .filter(cart=cart, round=cart.round)
+            .select_related("coupon_code", "coupon_code__coupon")
+            .first()
+        )
+
+        if applied:
+            cp = applied.coupon_code.coupon
+            discount_total = _calc_discount(
+                subtotal=subtotal,
+                discount_type=cp.discount_type,
+                discount_value=cp.discount_value,
+            )
+            coupon = {
+                "applied": True,
+                "coupon_id": cp.id,
+                "coupon_code": applied.coupon_code.code,
+                "discount_type": cp.discount_type,
+                "discount_value": float(cp.discount_value),
+                "discount_amount": discount_total,
+            }
+
         total = subtotal - discount_total
 
         return Response(
@@ -216,16 +215,15 @@ class CartUpdateQuantityAPIView(APIView):
         except CartError as e:
             return error_response(e)
         
-        broadcast_cart_event(
+        transaction.on_commit(lambda: broadcast_cart_event(
             table_usage_id=table_usage_id,
             event_type="CART_ITEM_UPDATED",
             message="장바구니 수량이 변경되었습니다.",
-        )
+        ))
 
         data = {"cart_price": cart.cart_price}
         if item:
-            data["item"] = {"id": item.id, "quantity": item.quantity, "line_price": item.line_price}
-
+            data["item"] = build_cart_item_payload(item)
         return Response({"message": "수량 변경 성공", "data": data}, status=200)
 
 
@@ -249,11 +247,11 @@ class CartDeleteItemAPIView(APIView):
         except CartError as e:
             return error_response(e)
         
-        broadcast_cart_event(
+        transaction.on_commit(lambda: broadcast_cart_event(
             table_usage_id=table_usage_id,
             event_type="CART_ITEM_DELETED",
             message="장바구니 항목이 삭제되었습니다.",
-        )
+        ))
 
         return Response({"message": "삭제 성공", "data": {"cart_price": cart.cart_price}}, status=200)
 
@@ -275,11 +273,11 @@ class CartPaymentInfoAPIView(APIView):
         except CartError as e:
             return error_response(e)
         
-        broadcast_cart_event(
+        transaction.on_commit(lambda: broadcast_cart_event(
             table_usage_id=table_usage_id,
             event_type="CART_PAYMENT_PENDING",
             message="결제 확인 화면으로 이동했습니다.",
-        )
+        ))
 
         return Response(
             {

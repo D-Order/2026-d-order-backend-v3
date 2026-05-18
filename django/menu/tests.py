@@ -28,7 +28,7 @@ class UserMenuListAPITest(APITestCase):
         self.menu = Menu.objects.create(booth=self.booth, name='피자', category='MENU', price=20000, stock=5)
         self.setmenu = SetMenu.objects.create(booth=self.booth, name='A세트', price=30000, description='세트 메뉴', image=None)
         self.usage = TableUsage.objects.create(table=self.table, started_at=timezone.now())
-        self.url = f'/api/v3/django/booth/{self.booth.pk}/menu-list/'
+        self.url = f'/api/v3/django/booth/{self.booth.public_id}/menu-list/'
 
     def test_menu_list_without_table_num(self):
         """table_num 없이 메뉴판 조회시 table_info 미포함, 메뉴 데이터만 반환"""

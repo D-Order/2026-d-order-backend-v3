@@ -17,13 +17,14 @@ import java.nio.charset.StandardCharsets;
 /**
  * {@code /server/**}, {@code /serving/**} 서버(직원/서빙) API — (기본) access_token 쿠키 필수
  * <p>
- * 단, 직원 호출 등록(emit)은 인증을 강제하지 않음
+ * 단, 직원 호출 등록(emit) 및 생성 직후 삭제는 인증을 강제하지 않음
  */
 @Component
 @RequiredArgsConstructor
 public class ServerApiJwtFilter extends OncePerRequestFilter {
 
     public static final String ATTR_BOOTH_ID = "BOOTH_ID";
+    public static final String ATTR_SESSION_ID = "SESSION_ID";
 
     private final CookieUtil cookieUtil;
     private final JwtUtil jwtUtil;
@@ -45,7 +46,7 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 직원 호출 등록(emit)만 인증을 강제하지 않음
+        // 직원 호출 등록(emit) / 생성 직후 삭제만 인증을 강제하지 않음
         if (isStaffCallPublicPath(path)) {
             filterChain.doFilter(request, response);
             return;
@@ -62,7 +63,9 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
 
         try {
             Long boothId = jwtUtil.getBoothIdFromToken(token);
+            String sessionId = jwtUtil.getSessionIdFromToken(token);
             request.setAttribute(ATTR_BOOTH_ID, boothId);
+            request.setAttribute(ATTR_SESSION_ID, sessionId);
             request.setAttribute("ACCESS_TOKEN", token);
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -76,10 +79,11 @@ public class ServerApiJwtFilter extends OncePerRequestFilter {
     }
 
     private boolean isProtectedPath(String path) {
-        return path.startsWith("/server/") || path.startsWith("/serving/");
+        return path.contains("/server/") || path.contains("/serving/");
     }
 
     private boolean isStaffCallPublicPath(String path) {
-        return "/server/staffcall/request".equals(path);
+        return path.endsWith("/server/staffcall/request")
+                || path.endsWith("/server/staffcall/delete");
     }
 }
