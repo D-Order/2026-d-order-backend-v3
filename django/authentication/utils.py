@@ -1,6 +1,8 @@
 """
 JWT 쿠키 유틸리티 함수
 """
+import http.cookies
+
 from django.conf import settings
 
 
@@ -20,10 +22,25 @@ _STALE_COOKIE_NAMES = ('csrftoken', 'sessionid', 'access_token', 'refresh_token'
 
 
 def clear_stale_domain_cookies(response):
-    """옛 도메인 쿠키(부모도메인/서브도메인 변형)를 모두 expire 처리한다."""
+    """옛 도메인 쿠키(부모도메인/서브도메인 변형)를 모두 expire 처리한다.
+
+    Django response.cookies는 SimpleCookie(이름 기준 dict)라 같은 이름으로
+    여러 도메인 변형을 delete_cookie 호출하면 마지막 entry만 살아남고,
+    또한 후속 set_cookie(domain=None) 호출 시 기존 domain 속성이 누수되어
+    새 쿠키에 잘못된 Domain attr이 붙는 문제가 있다.
+    이를 회피하기 위해 각 변형을 고유한 dict 키로 Morsel 객체를 직접 넣는다.
+    Morsel.key는 'csrftoken' 등 원본 이름을 유지하므로 Set-Cookie 출력은 정상.
+    """
+    past = 'Thu, 01-Jan-1970 00:00:00 GMT'
     for domain in _STALE_COOKIE_DOMAINS:
         for name in _STALE_COOKIE_NAMES:
-            response.delete_cookie(name, domain=domain, path='/')
+            morsel = http.cookies.Morsel()
+            morsel.set(name, '', '')
+            morsel['domain'] = domain
+            morsel['expires'] = past
+            morsel['max-age'] = 0
+            morsel['path'] = '/'
+            response.cookies[f'__stale__{name}__{domain}'] = morsel
     return response
 
 
