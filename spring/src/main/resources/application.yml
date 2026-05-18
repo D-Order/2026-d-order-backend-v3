@@ -142,7 +142,7 @@ jwt:
   cookie:
     secure: true
     same-site: "None"    # Django와 동일 (Safari/iOS WebSocket 쿠키 누락 방지) - 따옴표 필수 (YAML에서 None은 null로 파싱됨)
-    domain: .dorder-api.shop  # 모든 서브도메인 쿠키 공유
+    domain: ""           # host-only: Domain attr 생략하여 서브도메인 간 쿠키 누적/충돌 방지 (CookieUtil에서 빈값이면 .domain() 호출 생략)
 
 # 서버 설정
 server:

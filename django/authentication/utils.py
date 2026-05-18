@@ -4,6 +4,27 @@ JWT 쿠키 유틸리티 함수
 from django.conf import settings
 
 
+# 과거 도메인 설정(`.dorder-api.shop`, `dev.dorder-api.shop` 등) 시기에
+# 사용자 브라우저에 박힌 잔재 쿠키를 자동 정리하기 위한 도메인/이름 변형 목록.
+# delete_cookie는 Set-Cookie의 Domain attr이 정확히 일치해야 브라우저가 지우므로
+# 알려진 모든 변형을 시도해야 한다.
+_STALE_COOKIE_DOMAINS = (
+    '.dorder-api.shop',
+    'dorder-api.shop',
+    'dev.dorder-api.shop',
+    '.dev.dorder-api.shop',
+)
+_STALE_COOKIE_NAMES = ('csrftoken', 'sessionid', 'access_token', 'refresh_token')
+
+
+def clear_stale_domain_cookies(response):
+    """옛 도메인 쿠키(부모도메인/서브도메인 변형)를 모두 expire 처리한다."""
+    for domain in _STALE_COOKIE_DOMAINS:
+        for name in _STALE_COOKIE_NAMES:
+            response.delete_cookie(name, domain=domain, path='/')
+    return response
+
+
 def set_jwt_cookies(response, access_token, refresh_token):
     """
     Response 객체에 JWT 쿠키를 설정합니다.
