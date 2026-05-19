@@ -148,15 +148,19 @@ class BoothService:
         from order.models import Order
         Order.objects.filter(table_usage__table__booth=booth).delete()
 
-        from order.cache import invalidate_today_revenue
-        invalidate_today_revenue(booth.pk)
-
         # 4. 모든 TableUsage 삭제
         #    Cart.table_usage가 CASCADE이므로 Cart도 함께 삭제됨
         deleted_count, _ = TableUsage.objects.filter(table__booth=booth).delete()
 
-        # 5. 총매출 0 초기화 WebSocket 전송 (트랜잭션 커밋 후)
+        # 5. 커밋 후: 매출 캐시 무효화 + 총매출 0 WebSocket 전송
         def _send_ws_after_commit():
+            try:
+                from order.cache import invalidate_today_revenue
+                invalidate_today_revenue(booth.pk)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"[부스 초기화] 매출 캐시 무효화 실패: {e}")
+
             try:
                 from channels.layers import get_channel_layer
                 from asgiref.sync import async_to_sync
