@@ -795,8 +795,12 @@ def confirm_payment_and_mark_ordered(*, table_usage_id: int) -> Cart:
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
 
+    order_date = order.created_at.astimezone().date()
+
     def _after_commit():
-        today_revenue = update_today_revenue(booth_id, order.order_price)
+        today_revenue = update_today_revenue(
+            booth_id, int(order.order_price), for_date=order_date
+        )
 
         group_name = f"booth_{booth_id}.order"
 
