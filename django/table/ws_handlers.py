@@ -83,6 +83,20 @@ class TableMixin:
 class TableDetailMixin:
     """특정 테이블 상세 웹소켓 이벤트"""
 
+    async def reset_table(self, event):
+        """테이블 초기화 이벤트
+
+        Args:
+            event : reset_table
+                table_num : 초기화된 테이블 번호
+        """
+        await self.send_json({
+            'type': 'reset_table',
+            'timestamp': timezone.now().isoformat(),
+            'message': f'{event["data"]["table_num"]}번 테이블이 초기화되었습니다.',
+            'data': event['data']
+        })
+
     async def order_update(self, event):
         """주문 변경으로 인한 테이블 상세 업데이트
 

@@ -167,6 +167,18 @@ class TableService:
         transaction.on_commit(send_ws)
 
     @staticmethod
+    def _broadcast_detail(booth_pk, table_num, event):
+        """트랜잭션 커밋 후 특정 테이블 상세 WebSocket 그룹에 이벤트를 전송"""
+        def send_ws():
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                logger.error('[TableService] channel_layer 없어요')
+                return
+            async_to_sync(channel_layer.group_send)(f'booth_{booth_pk}.tables.{table_num}', event)
+
+        transaction.on_commit(send_ws)
+
+    @staticmethod
     def _broadcast_to_order_group(booth_pk, event):
         """주문 관리 그룹에 이벤트를 전송 (테이블 초기화 알림 등)"""
         def send_ws():
@@ -365,6 +377,13 @@ class TableService:
                 'count': found_count,
             }
         })
+        for table_num in reset_table_nums:
+            TableService._broadcast_detail(booth.pk, table_num, {
+                'type': 'reset_table',
+                'data': {
+                    'table_num': table_num,
+                }
+            })
         # 주문 관리 대시보드에도 알림 (WebSocket 실시간 반영용)
         TableService._broadcast_to_order_group(booth.pk, {
             'type': 'admin_table_reset',
