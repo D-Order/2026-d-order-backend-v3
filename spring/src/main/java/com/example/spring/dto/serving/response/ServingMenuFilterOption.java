@@ -8,4 +8,6 @@ import lombok.Getter;
 public class ServingMenuFilterOption {
     private Long id;
     private String name;
+    private String category;
+    private Boolean isSetMenu;
 }
