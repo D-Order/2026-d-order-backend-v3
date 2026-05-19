@@ -15,49 +15,89 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.example.spring.config.StaffCallHandshakeInterceptor.ATTR_BOOTH_ID;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ServingWebSocketHandler extends TextWebSocketHandler {
 
-    private final Set<WebSocketSession> sessions = ConcurrentHashMap.newKeySet();
+    private final Map<Long, Set<WebSocketSession>> boothSessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        sessions.add(session);
-        log.info("[웹소켓 접속] 새 태블릿 연결됨: {}", session.getId());
+        Object boothAttr = session.getAttributes().get(ATTR_BOOTH_ID);
+        if (!(boothAttr instanceof Long boothId)) {
+            log.warn("[serving ws] boothId 속성이 없어 연결 종료 session={}", session.getId());
+            try {
+                session.close(CloseStatus.NOT_ACCEPTABLE);
+            } catch (IOException e) {
+                log.warn("[serving ws] 연결 종료 실패 session={}", session.getId(), e);
+            }
+            return;
+        }
+
+        boothSessions.computeIfAbsent(boothId, key -> ConcurrentHashMap.newKeySet()).add(session);
+        log.info("[serving ws] 연결 boothId={}, session={}", boothId, session.getId());
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        sessions.remove(session);
-        log.info("[웹소켓 해제] 태블릿 연결 끊김: {}", session.getId());
-    }
-
-    public void broadcastMessage(String message) {
-        TextMessage textMessage = new TextMessage(message);
-        for (WebSocketSession session : sessions) {
-            try {
-                if (session.isOpen()) {
-                    session.sendMessage(textMessage);
+        Object boothAttr = session.getAttributes().get(ATTR_BOOTH_ID);
+        if (boothAttr instanceof Long boothId) {
+            Set<WebSocketSession> sessions = boothSessions.get(boothId);
+            if (sessions != null) {
+                sessions.remove(session);
+                if (sessions.isEmpty()) {
+                    boothSessions.remove(boothId);
                 }
-            } catch (IOException e) {
-                log.error("[웹소켓 전송 실패] session: {}", session.getId(), e);
             }
+            log.info("[serving ws] 연결 해제 boothId={}, session={}, status={}", boothId, session.getId(), status);
+        } else {
+            log.info("[serving ws] 연결 해제(boothId 없음) session={}, status={}", session.getId(), status);
         }
     }
 
-    public void broadcastEvent(String eventType, Object data) {
+    public void broadcastEvent(Long boothId, String eventType, Object data) {
+        if (boothId == null) {
+            log.warn("[serving ws] boothId null로 이벤트 전송 스킵 eventType={}", eventType);
+            return;
+        }
+
+        Set<WebSocketSession> sessions = boothSessions.get(boothId);
+        int targetCount = sessions == null ? 0 : sessions.size();
+        log.info("[serving ws] 이벤트 브로드캐스트 boothId={}, eventType={}, targets={}", boothId, eventType, targetCount);
+
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+
         try {
             Map<String, Object> payload = new HashMap<>();
             payload.put("type", eventType);
             payload.put("data", data);
 
-            String jsonMessage = objectMapper.writeValueAsString(payload);
-            broadcastMessage(jsonMessage);
+            TextMessage textMessage = new TextMessage(objectMapper.writeValueAsString(payload));
+
+            for (WebSocketSession session : sessions) {
+                if (!session.isOpen()) {
+                    sessions.remove(session);
+                    continue;
+                }
+                try {
+                    session.sendMessage(textMessage);
+                } catch (IOException e) {
+                    sessions.remove(session);
+                    log.warn("[serving ws] 전송 실패 boothId={}, session={}", boothId, session.getId(), e);
+                }
+            }
+
+            if (sessions.isEmpty()) {
+                boothSessions.remove(boothId);
+            }
         } catch (Exception e) {
-            log.error("[웹소켓 이벤트 직렬화 실패]", e);
+            log.error("[serving ws] 이벤트 직렬화 실패 boothId={}, eventType={}", boothId, eventType, e);
         }
     }
 }

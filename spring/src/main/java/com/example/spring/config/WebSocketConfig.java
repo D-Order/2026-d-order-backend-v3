@@ -33,7 +33,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
                         "https://*.dorder-api.shop",
                         "https://*.netlify.app"
                 )
-                .addInterceptors(new HttpSessionHandshakeInterceptor());
+                .addInterceptors(staffCallHandshakeInterceptor, new HttpSessionHandshakeInterceptor());
 
         registry.addHandler(staffCallWebSocketHandler, "/ws/server/staffcall")
                 .setAllowedOriginPatterns(
